@@ -1,6 +1,7 @@
-// --- Configuration & Global State ---
 const DB_KEY = 'uma_mock_db';
-const GAS_ENDPOINT = ''; // GASへ移行する場合はここに入力
+const GAS_ENDPOINT = ''; 
+let DISCORD_CLIENT_ID = '1342674996962230303'; // ※自分のクライアントIDに書き換えてください
+
 let currentUser = null;
 let currentCircle = null;
 let isAdminLogin = false;
@@ -115,6 +116,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             currentCircle = res.circle;
             portalOverlay.classList.add('hidden');
             appWrapper.style.display = 'flex';
+            appWrapper.style.flexDirection = 'column';
+            appWrapper.style.alignItems = 'center';
             
             const ua = document.getElementById('userAvatar');
             if (currentUser.icon) { ua.style.backgroundImage = `url('${currentUser.icon}')`; ua.textContent = ''; }
@@ -127,7 +130,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     document.getElementById('discordLoginBtn').onclick = () => {
-        const authUrl = `https://discord.com/api/oauth2/authorize?client_id=1342674996962230303&redirect_uri=${encodeURIComponent(window.location.origin + window.location.pathname)}&response_type=token&scope=identify`;
+        const redirect = window.location.origin + window.location.pathname;
+        const authUrl = `https://discord.com/api/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirect)}&response_type=token&scope=identify`;
         window.location.href = authUrl;
     };
 
