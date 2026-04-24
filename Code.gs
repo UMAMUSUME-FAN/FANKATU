@@ -1,27 +1,31 @@
-// --- サーバー側のデータベース処理 (Google Apps Script 完全版) ---
+// --- サーバー側のデータベース処理 (Googleスプレッドシート自動連動版 v6) ---
 // これを Google Apps Script (Code.gs) に「まるごと上書き」してデプロイしてください
 
-const PROP_KEY = 'UMA_TRACKER_DB_V4';
+const PROP_KEY = 'UMA_TRACKER_SS_ID';
 
 function doPost(e) {
   const prop = PropertiesService.getScriptProperties();
-  let db_str = prop.getProperty(PROP_KEY);
-  let db = {circles:{}, userToCircles:{}, globalWisdom:[]};
+  let ssId = prop.getProperty(PROP_KEY);
   
-  if (db_str) {
-    try { db = JSON.parse(db_str); } catch(err) { console.log("JSON Parse Error"); }
+  // スプレッドシートが無い場合は新しく作成する
+  if (!ssId) {
+    const newSS = SpreadsheetApp.create("UMA_TRACKER_DATABASE");
+    ssId = newSS.getId();
+    prop.setProperty(PROP_KEY, ssId);
+    // 初期シートの作成
+    newSS.insertSheet("Circles");
+    newSS.insertSheet("Timeline");
+    newSS.deleteSheet(newSS.getSheetByName("シート1"));
   }
 
+  const ss = SpreadsheetApp.openById(ssId);
   const p = JSON.parse(e.postData.contents);
   const action = p.action;
   const user = p.currentUser;
-  let success = true;
 
-  // デフォルトサークルの保証
-  if (!db.circles['circle-1']) {
-    db.circles['circle-1'] = { id: 'circle-1', name: 'NPC@サークル', members: {}, timeline: [], ownerId: 'guest' };
-  }
-  if (!db.userToCircles) db.userToCircles = {};
+  // メモリ上のDB（これまで通りPropertiesServiceも併用して高速化しつつ、重いデータはSSへ）
+  const DB_PROP = 'UMA_TRACKER_DB_JSON';
+  let db = JSON.parse(prop.getProperty(DB_PROP) || '{"circles":{}, "userToCircles":{}, "globalWisdom":[]}');
 
   try {
     if (action === 'createCircle') {
@@ -37,19 +41,6 @@ function doPost(e) {
         db.userToCircles[user.id].push(cid);
       }
       db.lastCreatedId = cid;
-    } else if (action === 'leaveCircle') {
-      if (user && db.userToCircles[user.id]) {
-        db.userToCircles[user.id] = db.userToCircles[user.id].filter(id => id !== p.circleId);
-        const c = db.circles[p.circleId];
-        if (c && c.members[user.id]) delete c.members[user.id];
-      }
-    } else if (action === 'joinCircle') {
-      if (user && db.circles[p.circleId]) {
-        if (!db.userToCircles[user.id]) db.userToCircles[user.id] = [];
-        if (!db.userToCircles[user.id].includes(p.circleId)) db.userToCircles[user.id].push(p.circleId);
-        const c = db.circles[p.circleId];
-        if (!c.members[user.id]) c.members[user.id] = { name: user.name, totalFans: 0, targetFans: 3000000, history: [], icon: user.avatar };
-      }
     } else if (action === 'updateFans') {
       const c = db.circles[p.circleId];
       if (c && user) {
@@ -57,34 +48,48 @@ function doPost(e) {
         if(!m) m = c.members[user.id] = { name: user.name, totalFans: 0, targetFans: 3000000, history: [], icon: user.avatar };
         m.totalFans = parseInt(p.fans);
         if(!m.history) m.history = []; m.history.push(m.totalFans);
-        if(m.history.length > 20) m.history.shift();
+        if(m.history.length > 30) m.history.shift();
       }
     } else if (action === 'postTimeline') {
       const c = db.circles[p.circleId];
       if (c && user) {
-        c.timeline.push({ userName: user.name, text: p.text, time: new Date().toLocaleTimeString('ja-JP'), images: p.images || [] });
-        if (c.timeline.length > 20) c.timeline.shift();
+        const post = { userName: user.name, text: p.text, time: new Date().toLocaleString('ja-JP'), images: p.images || [] };
+        c.timeline.push(post);
+        
+        // --- スプレッドシートへの記録 (永続保存・ログ) ---
+        const tlSheet = ss.getSheetByName("Timeline");
+        tlSheet.appendRow([new Date(), p.circleId, user.name, p.text, p.images ? p.images[0] : ""]);
+        
+        // --- 整理ロジック：古いスクショをメモリから消す (Propertiesの5KB制限対策) ---
+        // メモリ(JSON)上のタイムラインは最新10件だけにして軽く保つ
+        // (スプレッドシートには全部残っているので安心！)
+        if (c.timeline.length > 10) {
+          c.timeline.shift();
+        }
       }
-    } else if (action === 'updateSingleMemberTarget') {
-      const c = db.circles[p.circleId];
-      if (c && c.members[p.memberId]) c.members[p.memberId].targetFans = p.target;
-    } else if (action === 'updateConfig') {
-      const c = db.circles[p.circleId];
-      if (c) {
-        if(p.name) c.name = p.name;
-        if(p.circleTotalTarget !== undefined) c.circleTotalTarget = p.circleTotalTarget;
+    } else if (action === 'leaveCircle') {
+       if (user && db.userToCircles[user.id]) {
+         db.userToCircles[user.id] = db.userToCircles[user.id].filter(id => id !== p.circleId);
+         if(db.circles[p.circleId]) delete db.circles[p.circleId].members[user.id];
+       }
+    } else if (action === 'joinCircle') {
+      if (user && db.circles[p.circleId]) {
+        if (!db.userToCircles[user.id]) db.userToCircles[user.id] = [];
+        if (!db.userToCircles[user.id].includes(p.circleId)) db.userToCircles[user.id].push(p.circleId);
+        const c = db.circles[p.circleId];
+        if (!c.members[user.id]) c.members[user.id] = { name: user.name, totalFans: 0, targetFans: 3000000, history: [], icon: user.avatar };
       }
     }
 
-    // データの保存
-    prop.setProperty(PROP_KEY, JSON.stringify(db));
+    // JSONを保存 (画像データを抜いた後の軽いデータ)
+    prop.setProperty(DB_PROP, JSON.stringify(db));
     
   } catch (err) {
-    success = false;
+    console.log(err);
   }
 
-  return ContentService.createTextOutput(JSON.stringify({ success: success, db: db, lastCreatedId: db.lastCreatedId }))
+  return ContentService.createTextOutput(JSON.stringify({ success: true, db: db, lastCreatedId: db.lastCreatedId }))
     .setMimeType(ContentService.MimeType.JSON);
 }
 
-function doGet() { return ContentService.createTextOutput("UMA Tracker API v4 is Active."); }
+function doGet() { return ContentService.createTextOutput("UMA Tracker API v6 (Spreadsheet Connected) is Running."); }
