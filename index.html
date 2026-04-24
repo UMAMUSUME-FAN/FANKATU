@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Uma Tracker | Multi-Circle Platform</title>
+    <title>Uma Tracker | Circle Management</title>
     <link rel="stylesheet" href="style.css">
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Playfair+Display:wght@700&family=Outfit:wght@400;700&display=swap" rel="stylesheet">
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet">
@@ -13,115 +13,103 @@
 
     <!-- Auth Overlay (Discord Login) -->
     <div id="authOverlay" class="auth-overlay">
-        <div class="glass-panel" style="padding: 50px; text-align: center; max-width: 400px;">
-            <h1 style="font-family:'Playfair Display', serif; font-size: 32px; margin-bottom: 10px;">Uma Tracker</h1>
+        <div class="glass-panel" style="padding: 50px; text-align: center; max-width: 400px; border-radius: 40px;">
+            <h1 style="font-family:'Playfair Display', serif; font-size: 36px; margin-bottom: 10px; color:#4a282f;">Uma Tracker</h1>
             <p style="color:var(--text-muted); margin-bottom: 30px;">サークル管理プラットフォーム</p>
-            <button id="discordLoginBtn" class="glass-btn primary" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 15px;">
+            <button id="discordLoginBtn" class="glass-btn primary" style="width: 100%; display: flex; align-items: center; justify-content: center; gap: 10px; padding: 15px; font-size: 18px;">
                 <img src="https://assets-global.website-files.com/6257adef93867e50d84d30e2/636e0a6918e57475a843f59f_icon_clyde_blurple_RGB.svg" style="width: 24px; filter: brightness(0) invert(1);">
                 Discordでログイン
             </button>
         </div>
     </div>
 
-    <!-- Circle Selection Overlay (Portal) -->
+    <!-- Circle Selection Portal (Overlay) -->
     <div id="circleSelectionOverlay" class="auth-overlay hidden">
-        <div class="glass-panel" style="padding: 40px; width: 600px; max-width: 95%;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:25px;">
-                <h2 style="font-family:'Playfair Display', serif; font-size:28px;">Circle Portal</h2>
-                <div style="display:flex; align-items:center; gap:10px;">
-                    <span id="portalUserName" style="font-size:14px; font-weight:bold;">User</span>
-                    <div id="portalUserAvatar" class="user-avatar" style="width:35px; height:35px; font-size:16px;">?</div>
+        <div class="glass-panel" style="padding: 40px; width: 650px; max-width: 95%;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:30px; border-bottom: 2px solid rgba(0,0,0,0.05); padding-bottom:15px;">
+                <h2 style="font-family:'Playfair Display', serif; font-size:32px;">Portal</h2>
+                <div style="display:flex; align-items:center; gap:12px;">
+                    <span id="portalUserName" style="font-size:16px; font-weight:bold;">User</span>
+                    <div id="portalUserAvatar" class="user-avatar" style="width:40px; height:40px;">?</div>
                 </div>
             </div>
 
-            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:25px;">
-                <!-- Left: Search & Join -->
-                <div style="border-right: 1px solid rgba(0,0,0,0.05); padding-right:25px;">
-                    <h3 style="font-size:14px; color:var(--text-muted); margin-bottom:15px; text-transform:uppercase; letter-spacing:1px;">サークルを探す</h3>
-                    <div style="display:flex; gap:8px;">
-                        <input type="text" id="searchCircleInput" class="glass-input" placeholder="サークル名で検索...">
-                        <button id="searchCircleBtn" class="glass-btn" style="padding:8px;"><span class="material-icons-outlined">search</span></button>
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:30px;">
+                <div>
+                    <h3 style="font-size:14px; color:var(--text-muted); margin-bottom:20px; text-transform:uppercase; letter-spacing:1px; display:flex; align-items:center; gap:5px;"><span class="material-icons-outlined" style="font-size:18px;">search</span> 探す</h3>
+                    <div style="display:flex; gap:8px; margin-bottom:15px;">
+                        <input type="text" id="searchCircleInput" class="glass-input" placeholder="サークル名を検索...">
+                        <button id="searchCircleBtn" class="glass-btn primary" style="padding:10px;"><span class="material-icons-outlined">search</span></button>
                     </div>
-                    <div id="searchResultsList" style="margin-top:15px; max-height:200px; overflow-y:auto; display:flex; flex-direction:column; gap:10px;">
+                    <div id="searchResultsList" style="max-height:220px; overflow-y:auto; display:flex; flex-direction:column; gap:10px;">
                         <!-- Results here -->
                     </div>
                 </div>
-                <!-- Right: My Circles & Create -->
                 <div>
-                    <h3 style="font-size:14px; color:var(--text-muted); margin-bottom:15px; text-transform:uppercase; letter-spacing:1px;">所属サークル</h3>
-                    <div id="myCirclesList" style="display:flex; flex-direction:column; gap:10px; max-height:180px; overflow-y:auto; margin-bottom:20px;">
+                    <h3 style="font-size:14px; color:var(--text-muted); margin-bottom:20px; text-transform:uppercase; letter-spacing:1px; display:flex; align-items:center; gap:5px;"><span class="material-icons-outlined" style="font-size:18px;">groups</span> 所属済み</h3>
+                    <div id="myCirclesList" style="display:flex; flex-direction:column; gap:10px; max-height:200px; overflow-y:auto; margin-bottom:20px;">
                         <!-- My circles here -->
                     </div>
-                    <button id="showCreateCircleBtn" class="glass-btn primary" style="width:100%; font-size:13px;">+ 新しいサークルを作成</button>
+                    <button id="showCreateCircleBtn" class="glass-btn primary" style="width:100%; font-size:14px; border:2px dashed rgba(255,255,255,0.3);">+ 新規サークル作成</button>
                 </div>
             </div>
+            <button id="logoutBtnFromPortal" style="margin-top:30px; border:none; background:transparent; cursor:pointer; color:var(--text-muted); font-size:12px; display:flex; align-items:center; gap:5px;"><span class="material-icons-outlined" style="font-size:16px;">logout</span> ログアウト</button>
         </div>
     </div>
 
     <!-- Create Circle Modal -->
     <div id="create-circle-modal" class="modal-overlay hidden">
-        <div class="modal-content glass-panel" style="width: 400px;">
-            <h2 style="font-family:'Playfair Display', serif; margin-bottom:20px;">Create New Circle</h2>
-            <div style="margin-bottom:20px;">
-                <label style="font-size:12px; color:var(--text-muted);">サークル名</label>
-                <input type="text" id="newCircleName" class="glass-input" placeholder="例: トレセン学園Aチーム">
+        <div class="modal-content glass-panel" style="width: 400px; border: 2px solid var(--primary);">
+            <h2 style="font-family:'Playfair Display', serif; margin-bottom:25px;">Create New Circle</h2>
+            <div style="margin-bottom:25px;">
+                <label style="font-size:12px; color:var(--text-muted); font-weight:bold;">サークル名</label>
+                <input type="text" id="newCircleName" class="glass-input" style="margin-top:5px;" placeholder="例: 日本最強ウマ娘サークル">
             </div>
-            <div style="display:flex; gap:10px;">
-                <button class="glass-btn" id="cancelCreateCircle" style="flex:1;">キャンセル</button>
-                <button class="glass-btn primary" id="confirmCreateCircle" style="flex:1;">作成する</button>
+            <div style="display:flex; gap:15px;">
+                <button class="glass-btn" id="cancelCreateCircle" style="flex:1;">戻る</button>
+                <button class="glass-btn primary" id="confirmCreateCircle" style="flex:1;">作成確定</button>
             </div>
         </div>
     </div>
 
-    <!-- Main App Wrapper -->
-    <div id="appWrapper" class="app-layout" style="display: none; width: 100%; min-height: 100vh;">
-        <!-- Top Nav (Floating Pill) -->
+    <!-- Main Dashboard -->
+    <div id="appWrapper" class="app-layout" style="display: none;">
+        <!-- Top Navigation -->
         <div class="top-nav-pill">
-            <a href="#" class="nav-link active" data-target="heroCard">
+            <div style="display:flex; align-items:center; gap:10px; border-right:2px solid rgba(0,0,0,0.05); padding-right:20px; margin-right:10px;">
+                <span class="user-avatar" id="userAvatar" style="width:35px; height:35px; font-size:14px;">?</span>
+                <span id="userNameDisplay" style="font-size:14px; font-weight:700;">USER</span>
+            </div>
+            <a href="#" class="nav-link active" data-target="home">
                 <span class="material-icons-outlined">home</span>
-                <div style="display:flex; flex-direction:column; line-height:1.2;"><span>Home</span><span style="font-size:10px; color:var(--text-muted); font-weight:normal;">ホーム</span></div>
+                <div class="nav-text"><span>Home</span><span class="sub">ホーム</span></div>
             </a>
-            <a href="#" class="nav-link" data-target="statsCard">
-                <span class="material-icons-outlined">bar_chart</span>
-                <div style="display:flex; flex-direction:column; line-height:1.2;"><span>Stats</span><span style="font-size:10px; color:var(--text-muted); font-weight:normal;">サークル統計</span></div>
+            <a href="#" class="nav-link" id="statsBtn">
+                <span class="material-icons-outlined">analytics</span>
+                <div class="nav-text"><span>Stats</span><span class="sub">詳細統計</span></div>
             </a>
-            <a href="#" class="nav-link" data-target="membersCard">
-                <span class="material-icons-outlined">group</span>
-                <div style="display:flex; flex-direction:column; line-height:1.2;"><span>Circle</span><span style="font-size:10px; color:var(--text-muted); font-weight:normal;">メンバー一覧</span></div>
-            </a>
-            <a href="#" id="adminBtn" style="text-decoration:none; color:var(--text-muted); font-weight:600; display:flex; align-items:center; gap:8px; padding:10px 20px; border-radius:30px; transition:0.3s;">
+            <a href="#" class="nav-link" id="adminBtn">
                 <span class="material-icons-outlined">admin_panel_settings</span>
-                <div style="display:flex; flex-direction:column; line-height:1.2;"><span>Admin</span><span style="font-size:10px; color:var(--text-muted); font-weight:normal;">管理者</span></div>
+                <div class="nav-text"><span>Admin</span><span class="sub">管理者</span></div>
             </a>
-            <div class="user-avatar" id="userAvatar" title="自分のアイコン変更">?</div>
-            <input type="file" id="myAvatarUpload" style="display:none;" accept="image/*">
-            <button id="logoutBtn" style="border:none; background:transparent; cursor:pointer; color:#9d8e90; margin-left:10px;" title="ログアウト"><span class="material-icons-outlined">logout</span></button>
+            <div style="display:flex; align-items:center; gap:15px; margin-left:10px; border-left:2px solid rgba(0,0,0,0.05); padding-left:20px;">
+                <button id="switchCircleBtn" class="glass-btn" style="padding:8px 15px; font-size:12px; background:rgba(0,0,0,0.05); display:flex; align-items:center; gap:5px;">
+                    <span class="material-icons-outlined" style="font-size:16px;">swap_horiz</span> 切り替え
+                </button>
+                <button id="logoutBtn" style="border:none; background:transparent; cursor:pointer; color:var(--text-muted);"><span class="material-icons-outlined">logout</span></button>
+            </div>
         </div>
 
         <div class="main-dashboard-grid">
-            <!-- Left Tiny Nav -->
-            <div class="tiny-side-nav">
-                <span class="material-icons-outlined nav-symbol active" data-target="heroCard" title="Home">home</span>
-                <span class="material-icons-outlined nav-symbol" data-target="statsCard" title="Stats">bar_chart</span>
-                <span class="material-icons-outlined nav-symbol" data-target="membersCard" title="Members">group</span>
-                <span class="material-icons-outlined nav-symbol" data-target="dropzone" title="Upload">cloud_upload</span>
-                <div style="border-top:1px solid #ddd; margin:10px 0; width:30px;"></div>
-                <div id="switchCircleBtn" title="サークルを切り替える (Portal)" style="cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:2px; transition:0.3s;">
-                    <span class="material-icons-outlined" style="color:var(--primary); font-size:28px;">swap_horizontal_circle</span>
-                    <span style="font-size:8px; font-weight:bold; color:var(--text-muted); text-align:center; line-height:1;">CHANGE</span>
-                </div>
-            </div>
-
             <!-- Center Panel (Hero) -->
             <div class="hero-card glass-panel" id="heroCard">
                 <div class="hero-top" style="display:flex; justify-content:space-between; width:100%; align-items:center;">
-                    <div style="display:flex; align-items:center; gap:10px;">
-                        <span class="tag circle-name-display" style="color:var(--primary); font-weight:700;">Circle Name</span>
-                        <a id="circleDiscordLink" href="#" target="_blank" class="glass-btn" style="padding:4px 10px; font-size:10px; background:#5865F2; color:white; display:none; align-items:center; gap:5px; text-decoration:none; border-radius:10px;">
-                            <img src="https://assets-global.website-files.com/6257adef93867e50d84d30e2/636e0a6918e57475a843f59f_icon_clyde_blurple_RGB.svg" style="width:14px; filter:brightness(0) invert(1);"> 参加
+                    <div style="display:flex; align-items:center; gap:12px;">
+                        <span class="tag circle-name-display" id="circleNameDisplay" style="font-size:28px;">CIRCLE NAME</span>
+                        <a id="circleDiscordLink" href="#" target="_blank" class="glass-btn" style="padding:6px 15px; font-size:12px; background:#5865F2; color:white; display:none; align-items:center; gap:8px; text-decoration:none; border-radius:15px;">
+                            <img src="https://assets-global.website-files.com/6257adef93867e50d84d30e2/636e0a6918e57475a843f59f_icon_clyde_blurple_RGB.svg" style="width:16px; filter:brightness(0) invert(1);"> Discord
                         </a>
                     </div>
-                    <span class="tag">‘Uma Musume’</span>
                 </div>
                 <h1 class="hero-giant-title">My<br>Fan Quota</h1>
                 <div class="hero-progress-section">
@@ -130,64 +118,111 @@
                     </div>
                     <span class="hero-percent" id="totalFanPercentText">0%</span>
                 </div>
-                <div style="margin-top: 30px; display:flex; gap:50px; text-align:center;">
+                <div style="margin-top: 40px; display:flex; gap:60px; text-align:center;">
                     <div>
-                        <p style="font-size:12px; color:#9d8e90; text-transform:uppercase;">My Target</p>
-                        <p style="font-size:24px; font-family:'Playfair Display', serif;" id="displayTotalTarget">0</p>
+                        <p style="font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:1px; margin-bottom:5px;">My Target</p>
+                        <p style="font-size:32px; font-family:'Playfair Display', serif; color:var(--text-dark);" id="displayTotalTarget">0</p>
                     </div>
                     <div>
-                        <p style="font-size:12px; color:#9d8e90; text-transform:uppercase;">Remaining</p>
-                        <p style="font-size:24px; font-family:'Playfair Display', serif;" id="displayRemaining">0</p>
+                        <p style="font-size:11px; color:var(--text-muted); text-transform:uppercase; letter-spacing:1px; margin-bottom:5px;">Remaining</p>
+                        <p style="font-size:32px; font-family:'Playfair Display', serif; color:var(--primary);" id="displayRemaining">0</p>
                     </div>
                 </div>
             </div>
 
-            <!-- Right Column Top (Growth Chart) -->
-            <div class="side-card glass-panel chart-panel" id="statsCard">
+            <!-- Dashboard Analytics -->
+            <div class="side-card glass-panel" id="statsCard">
                 <div class="card-header" style="display:flex; justify-content:space-between; align-items:flex-start;">
                     <div>
-                        <h3 id="mainChartTitle">Fan Count Growth</h3>
-                        <p id="mainChartDesc">サークル全体の推移</p>
+                        <h3>Growth Chart</h3>
+                        <p>ファン数推移グラフ</p>
                     </div>
-                    <button class="glass-btn primary" id="toggleChartBtn" style="padding: 5px 12px; font-size:11px;">個人の推移を表示</button>
+                    <button class="glass-btn primary" id="toggleChartBtn" style="padding: 6px 14px; font-size:12px;">サークル全体を表示</button>
                 </div>
-                <!-- Canvas container needs careful sizing -->
-                <div style="position:relative; height: 180px; width: 100%;">
+                <div style="position:relative; height: 200px; width: 100%;">
                     <canvas id="growthChart"></canvas>
                 </div>
             </div>
 
-            <!-- Right Column Middle (Members) -->
-            <div class="side-card glass-panel members-panel" id="membersCard">
+            <!-- Members -->
+            <div class="side-card glass-panel" id="membersCard">
                 <div class="card-header">
                     <h3>Circle Members</h3>
-                    <p>サークルメンバー (クリックで詳細表示)</p>
+                    <p>所属メンバー一覧 (クリックで詳細)</p>
                 </div>
                 <div class="members-grid-mini" id="membersGrid">
-                    <!-- JS injects members here -->
+                    <!-- JS injects members -->
                 </div>
             </div>
 
-            <!-- Circle Ranking Panel (New) -->
-            <div class="side-card glass-panel ranking-panel" id="rankingCard">
+            <!-- Ranking -->
+            <div class="side-card glass-panel" id="rankingCard">
                 <div class="card-header">
                     <h3 style="display:flex; align-items:center; gap:8px;"><span class="material-icons-outlined" style="color:#e0c384;">emoji_events</span>Nationwide Ranking</h3>
-                    <p>他の全サークルとのファン数比較</p>
+                    <p>全国サークル・ファン数比較</p>
                 </div>
-                <div id="circleRankingList" style="display:flex; flex-direction:column; gap:10px; margin-top:10px;">
-                    <!-- JS injects rankings here -->
+                <div id="circleRankingList" style="display:flex; flex-direction:column; gap:12px; margin-top:5px;">
+                    <!-- JS injects ranking -->
                 </div>
             </div>
 
-            <!-- Bottom Left (Data Upload Area) -->
-            <div class="bottom-card glass-panel" id="dropzone">
+            <!-- Upload Area -->
+            <div class="bottom-card glass-panel" id="dropzone" style="grid-column: 2/3;">
                 <div class="card-header">
                     <h3>Data Upload (Screenshot)</h3>
                     <p>Alt+PrtSc で撮影後、この画面で Ctrl+V すぐに送信されます</p>
                 </div>
-                <div id="uploadInner" style="text-align:center; padding: 20px; color:#9d8e90;">
-                    <span class="material-icons-outlined" style="font-size:40px;">cloud_upload</span>
-                    <p style="margin-top:10px; font-weight:bold;">Waiting for Paste...</p>
+                <div id="uploadInner" style="text-align:center; padding: 30px; color:var(--text-muted); border: 2px dashed rgba(0,0,0,0.05); border-radius:20px;">
+                    <span class="material-icons-outlined" style="font-size:50px;">cloud_upload</span>
+                    <p style="margin-top:15px; font-weight:bold; color:var(--text-dark);">Waiting for Paste...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Master Stats Overlay (FULL SCREEN) -->
+    <div id="masterStatsOverlay" class="modal-overlay hidden">
+        <div class="glass-panel" style="width: 1000px; max-width:98%; height: 90vh; overflow-y:auto; padding:50px; position:relative;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:40px;">
+                <h1 style="font-family:'Playfair Display', serif; font-size:42px; color:var(--text-dark);">Circle Analytics</h1>
+                <span class="material-icons-outlined" id="closeStatsBtn" style="cursor:pointer; font-size:40px; color:var(--text-muted);">close</span>
+            </div>
+
+            <div style="display:grid; grid-template-columns: 1fr 1fr; gap:40px;">
+                <!-- Left: Full Ranking Table -->
+                <div class="glass-panel" style="background:white;">
+                    <h3 style="margin-bottom:20px; color:var(--primary); display:flex; align-items:center; gap:10px;"><span class="material-icons-outlined">leaderboard</span>サークル内ランキング</h3>
+                    <table style="width:100%; border-collapse:collapse;" id="circleLeaderboardTable">
+                        <thead>
+                            <tr style="border-bottom:2px solid #eee; text-align:left; color:var(--text-muted); font-size:12px;">
+                                <th style="padding:10px;">順位</th>
+                                <th style="padding:10px;">メンバー</th>
+                                <th style="padding:10px;">獲得ファン数</th>
+                                <th style="padding:10px;">目標比</th>
+                            </tr>
+                        </thead>
+                        <tbody id="circleLeaderboardBody">
+                            <!-- JS injects rows -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Right: Targets & Overview -->
+                <div style="display:flex; flex-direction:column; gap:30px;">
+                    <div class="glass-panel" style="background:rgba(251,161,186,0.05); border:1px solid var(--primary);">
+                        <h3 style="font-size:16px; margin-bottom:15px;">Circle Total Progress</h3>
+                        <p id="masterTotalFanDisplay" style="font-size:32px; font-family:'Playfair Display', serif; font-weight:bold;">0 / 0</p>
+                        <div style="width:100%; height:15px; background:rgba(0,0,0,0.05); border-radius:10px; margin-top:15px; overflow:hidden;">
+                            <div id="masterTotalBar" style="height:100%; background:linear-gradient(90deg, var(--primary), var(--secondary)); width:0%;"></div>
+                        </div>
+                    </div>
+
+                    <div class="glass-panel" style="flex:1;">
+                        <h3 style="font-size:16px; margin-bottom:15px;">Weekly Contribution</h3>
+                        <div id="weeklyContributionList" style="display:flex; flex-direction:column; gap:15px;">
+                            <!-- Top 3 contributors -->
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -196,110 +231,82 @@
     <!-- Admin Settings Modal -->
     <div id="admin-modal" class="modal-overlay hidden">
         <div class="modal-content glass-panel" style="width: 550px; max-width: 95%; position:relative;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px;">
-                <h2 style="font-family:'Playfair Display', serif;">Administrator Settings</h2>
-                <span class="material-icons-outlined close-modal" id="closeAdmin" style="cursor:pointer;">close</span>
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 25px;">
+                <h2 style="font-family:'Playfair Display', serif; font-size:24px;">Admin Console</h2>
+                <span class="material-icons-outlined" id="closeAdmin" style="cursor:pointer; color:var(--text-muted);">close</span>
             </div>
             
-            <div style="max-height: 70vh; overflow-y: auto; padding-right: 10px;">
-                <!-- Circle Basic Info -->
-                <div style="margin-bottom: 20px; background: rgba(251, 161, 186, 0.05); padding: 20px; border-radius: 20px; border: 1px solid rgba(251, 161, 186, 0.2);">
-                    <label style="font-size:14px; font-weight:bold; color:var(--primary); display:flex; align-items:center; gap:5px;">
-                        <span class="material-icons-outlined" style="font-size:18px;">edit</span> サークル名の変更
-                    </label>
-                    <input type="text" id="adminCircleNameInput" class="glass-input" style="margin-top:8px; border-color:var(--primary);" placeholder="サークル名を入力">
+            <div style="max-height: 75vh; overflow-y: auto; padding-right: 15px;">
+                <div style="margin-bottom: 25px; background: rgba(251, 161, 186, 0.05); padding: 25px; border-radius: 20px; border: 1px solid rgba(251, 161, 186, 0.2);">
+                    <label style="font-size:13px; font-weight:bold; color:var(--primary);">サークル名の変更</label>
+                    <input type="text" id="adminCircleNameInput" class="glass-input" style="margin-top:8px;">
                 </div>
 
-                <div style="margin-bottom: 20px;">
-                    <label style="font-size:14px; font-weight:bold; color:var(--text-muted);">今月の目標総ファン数 (サークル全体)</label>
-                    <input type="number" id="adminTotalTarget" class="glass-input" style="margin-top:5px;" value="100000000">
-                </div>
-
-                <!-- Membership Management -->
-                <div style="margin-bottom: 20px;">
-                    <label style="font-size:14px; font-weight:bold; color:var(--text-muted);">所属申請の管理 (承認待ち)</label>
-                    <div id="adminJoinRequests" style="max-height: 120px; overflow-y: auto; background: rgba(251, 161, 186, 0.08); padding: 15px; border-radius: 10px; margin-top:5px; border: 1px dashed var(--primary);">
-                        <!-- JS injects requests -->
+                <div style="margin-bottom: 25px;">
+                    <label style="font-size:13px; font-weight:bold; color:var(--text-dark);">所属申請の承認待ち</label>
+                    <div id="adminJoinRequests" style="margin-top:10px; background:rgba(0,0,0,0.03); padding:15px; border-radius:15px; min-height:60px;">
+                        <!-- Requests here -->
                     </div>
                 </div>
 
-                <!-- Target Settings -->
-                <div style="margin-bottom: 20px;">
-                    <label style="font-size:14px; font-weight:bold; color:var(--text-muted);">個別の目標ファン数設定</label>
-                    <div id="adminMemberList" style="max-height: 180px; overflow-y: auto; background: rgba(0,0,0,0.03); padding: 15px; border-radius: 10px; margin-top:5px;">
-                        <!-- JS injects checkboxes -->
+                <div style="margin-bottom: 25px;">
+                    <label style="font-size:13px; font-weight:bold; color:var(--text-dark);">個別目標設定 (チェックして変更)</label>
+                    <div id="adminMemberList" style="max-height: 200px; overflow-y: auto; margin-top:10px; padding:10px; background:white; border-radius:15px; border:1px solid #eee;">
+                        <!-- Checkbox list -->
                     </div>
-                </div>
-
-                <div style="margin-bottom: 20px;">
-                    <label style="font-size:12px; color:var(--text-muted);">※上記でチェックを入れたメンバーの目標値を一括設定</label>
-                    <div style="display:flex; gap:10px; margin-top:5px;">
+                    <div style="display:flex; gap:10px; margin-top:15px;">
                         <input type="number" id="adminIndividualTarget" class="glass-input" value="3000000">
-                        <button class="glass-btn primary" id="applyIndividualTargetBtn" style="white-space:nowrap;">適用する</button>
+                        <button class="glass-btn primary" id="applyIndividualTargetBtn" style="white-space:nowrap; padding:10px 25px;">適用</button>
                     </div>
                 </div>
 
-                <!-- External Links -->
-                <div style="margin-bottom: 20px; border-top: 1px solid rgba(0,0,0,0.1); padding-top: 20px;">
-                    <label style="font-size:14px; font-weight:bold; color:#5865F2; display:flex; align-items:center; gap:5px;">
-                        Discord招待URL (外部公開用)
-                    </label>
-                    <input type="text" id="adminDiscordInvite" class="glass-input" style="margin-top:5px;" placeholder="https://discord.gg/...">
-                </div>
-
-                <div style="margin-bottom: 20px; border-top: 1px solid rgba(0,0,0,0.1); padding-top: 20px;">
-                    <label style="font-size:14px; font-weight:bold; color:#7289da; display:flex; align-items:center; gap:5px;">
-                        Discord連携 (通知用Webhook)
-                    </label>
+                <div style="border-top:1px solid #eee; padding-top:20px; margin-bottom: 25px;">
+                    <label style="font-size:13px; font-weight:bold; color:#7289da;">Discord Webhook (URL)</label>
                     <input type="text" id="adminDiscordWebhook" class="glass-input" style="margin-top:5px;" placeholder="https://discord.com/api/webhooks/...">
                 </div>
 
-                <!-- Admin Security -->
-                <div style="margin-bottom: 20px; border-top: 1px solid rgba(0,0,0,0.1); padding-top: 20px;">
-                    <label style="font-size:14px; font-weight:bold; color:var(--text-muted);">管理者ログイン情報の変更</label>
-                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:8px;">
-                        <div>
-                            <span style="font-size:11px; color:var(--text-muted);">新しいID</span>
-                            <input type="text" id="adminIdInput" class="glass-input" placeholder="管理者ID">
-                        </div>
-                        <div>
-                            <span style="font-size:11px; color:var(--text-muted);">新しいPASS</span>
-                            <input type="text" id="adminPassInput" class="glass-input" placeholder="パスワード">
-                        </div>
+                <div style="margin-bottom: 25px;">
+                    <label style="font-size:13px; font-weight:bold; color:#5865F2;">Discord招待リンク (参加ボタン用)</label>
+                    <input type="text" id="adminDiscordInvite" class="glass-input" style="margin-top:5px;" placeholder="https://discord.gg/...">
+                </div>
+
+                <div style="border-top:1px solid #eee; padding-top:20px; margin-bottom: 25px;">
+                    <label style="font-size:13px; font-weight:bold; color:var(--text-dark);">リーダーログイン情報の更新</label>
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:15px; margin-top:8px;">
+                        <input type="text" id="adminIdInput" class="glass-input" placeholder="新ID">
+                        <input type="text" id="adminPassInput" class="glass-input" placeholder="新パスワード">
                     </div>
                 </div>
             </div>
             
-            <button class="glass-btn primary" id="saveAdminBtn" style="width:100%; margin-top:20px; padding:15px; font-size:18px;">全体設定を保存する</button>
+            <button class="glass-btn primary" id="saveAdminBtn" style="width:100%; margin-top:20px; padding:15px; font-size:18px; border-radius:20px;">設定内容を保存する</button>
         </div>
     </div>
 
     <!-- Member Details Drawer -->
     <div id="member-drawer-overlay" class="modal-overlay hidden">
-        <div id="section-member-details" class="glass-panel" style="position:absolute; left:0; top:0; width:450px; height:100%; border-radius:0 30px 30px 0; overflow-y:auto; transform:translateX(-100%); transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);">
-            <div style="display:flex; justify-content:flex-end; padding:20px;">
-                <span class="material-icons-outlined" id="close-drawer-btn" style="cursor:pointer; font-size:30px;">close</span>
+        <div id="section-member-details" class="glass-panel" style="position:absolute; right:0; top:0; width:450px; height:100%; border-radius:30px 0 0 30px; overflow-y:auto; transform:translateX(100%); transition: 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);">
+            <div style="display:flex; justify-content:flex-end; padding:25px;">
+                <span class="material-icons-outlined" id="close-drawer-btn" style="cursor:pointer; font-size:30px; color:var(--text-muted);">close</span>
             </div>
-            <div style="padding: 0 40px 40px 40px;">
-                <h1 style="font-family:'Playfair Display', serif; font-size:32px; color:#4a282f; margin-bottom:30px;">Member Data</h1>
-                
-                <div style="display:flex; flex-direction:column; align-items:center; gap:20px;">
-                    <div id="detail-avatar" style="width:120px; height:120px; border-radius:50%; background:#eee; background-size:cover; display:flex; align-items:center; justify-content:center; font-size:60px; box-shadow: 0 5px 15px rgba(0,0,0,0.1);"></div>
-                    <button class="glass-btn" id="changeMemberIconBtn" style="font-size:12px; padding:5px 15px;">サムネを変更</button>
+            <div style="padding: 0 40px;">
+                <div style="text-align:center;">
+                    <div id="detail-avatar" style="width:140px; height:140px; border-radius:50%; background:#eee; margin: 0 auto 20px; background-size:cover; display:flex; align-items:center; justify-content:center; box-shadow: 0 10px 30px rgba(0,0,0,0.1); border:5px solid white;"></div>
+                    <button id="changeMemberIconBtn" class="glass-btn" style="font-size:12px; padding:5px 15px; margin-bottom:10px;">アイコン変更</button>
                     <input type="file" id="memberIconUpload" style="display:none;" accept="image/*">
-                    <h2 id="detail-name" style="font-size:28px; font-weight:bold; color:#4a282f;">Loading...</h2>
+                    <h2 id="detail-name" style="font-size:32px; font-family:'Playfair Display', serif; color:var(--text-dark);">Name</h2>
                 </div>
                 
-                <div style="margin-top:40px; padding:20px; background:rgba(255,255,255,0.6); border-radius:20px;">
-                    <p style="color:#9d8e90; font-size:14px;">獲得ファン数 / 個別目標</p>
-                    <p style="color:#fba1ba; font-size:24px; font-weight:bold;" id="detail-fan">0 / 0</p>
-                    <div style="width:100%; height:10px; background:#eee; border-radius:5px; margin-top:10px; overflow:hidden;">
-                        <div id="detail-progress" style="height:100%; background:linear-gradient(90deg, #fba1ba, #e0c384); width:0%;"></div>
+                <div style="margin-top:40px; padding:30px; background:rgba(0,0,0,0.02); border-radius:30px;">
+                    <p style="color:var(--text-muted); font-size:13px; text-transform:uppercase; letter-spacing:1px; margin-bottom:10px;">現在の獲得ファン数</p>
+                    <p style="color:var(--text-dark); font-size:28px; font-weight:bold;" id="detail-fan">0 / 0</p>
+                    <div style="width:100%; height:12px; background:white; border-radius:10px; margin-top:15px; overflow:hidden;">
+                        <div id="detail-progress" style="height:100%; background:linear-gradient(90deg, var(--primary), var(--secondary)); width:0%;"></div>
                     </div>
                 </div>
 
-                <div style="margin-top:20px; padding:20px; background:rgba(255,255,255,0.6); border-radius:20px;">
-                    <p style="color:#9d8e90; font-size:14px; margin-bottom:10px;">今月のファン数変動グラフ</p>
+                <div style="margin-top:30px; padding:20px;">
+                    <p style="color:var(--text-muted); font-size:13px; margin-bottom:15px;">個別推移データ</p>
                     <div style="position:relative; height: 180px; width: 100%;">
                         <canvas id="memberDailyChart"></canvas>
                     </div>
@@ -308,6 +315,6 @@
         </div>
     </div>
 
-    <script src="main.js"></script>
+    <script src="main.js?v=3"></script>
 </body>
 </html>

@@ -1,6 +1,6 @@
 const DB_KEY = 'uma_mock_db';
 const GAS_ENDPOINT = ''; 
-let DISCORD_CLIENT_ID = '1497168159210340484'; // 正しいIDに更新しました sw
+let DISCORD_CLIENT_ID = '1497168159210340484';
 
 let currentUser = null;
 let currentCircle = null;
@@ -9,403 +9,323 @@ let isAdminLogin = false;
 // --- DOM References ---
 document.addEventListener('DOMContentLoaded', async () => {
     const authOverlay = document.getElementById('authOverlay');
-    const appWrapper = document.getElementById('appWrapper');
     const portalOverlay = document.getElementById('circleSelectionOverlay');
+    const appWrapper = document.getElementById('appWrapper');
+    const masterStatsOverlay = document.getElementById('masterStatsOverlay');
+
+    // Init data from Mock DB
+    const db = await callBackend({ action: 'init' });
     
-    // --- 1. Boot sequence ---
-    try {
-        const fragment = new URLSearchParams(window.location.hash.slice(1));
-        const accessToken = fragment.get('access_token');
-
-        if (accessToken) {
-            const userRes = await fetch('https://discord.com/api/users/@me', { headers: { authorization: `Bearer ${accessToken}` } });
-            const userData = await userRes.json();
-            currentUser = { 
-                memberId: userData.id, 
-                name: userData.username, 
-                icon: userData.avatar ? `https://cdn.discordapp.com/avatars/${userData.id}/${userData.avatar}.png` : '' 
-            };
-            localStorage.setItem('uma_current_user', JSON.stringify(currentUser));
-            window.location.hash = '';
-            await loginSuccess();
-        } else {
-            const savedUser = localStorage.getItem('uma_current_user');
-            if (savedUser) {
-                currentUser = JSON.parse(savedUser);
-                await loginSuccess();
-            } else {
-                authOverlay.classList.remove('hidden');
-            }
-        }
-    } catch (e) {
-        console.error("Boot failed:", e);
-        authOverlay.classList.remove('hidden');
+    // Check if returning from Discord OAuth
+    const params = new URLSearchParams(window.location.hash.substring(1));
+    const token = params.get('access_token');
+    
+    if (token) {
+        window.history.replaceState({}, document.title, window.location.pathname);
+        const userRes = await fetch('https://discord.com/api/users/@me', {
+            headers: { Authorization: `Bearer ${token}` }
+        });
+        const discordUser = await userRes.json();
+        
+        currentUser = {
+            id: discordUser.id,
+            name: discordUser.username,
+            avatar: `https://cdn.discordapp.com/avatars/${discordUser.id}/${discordUser.avatar}.png`
+        };
+        
+        authOverlay.classList.add('hidden');
+        showPortal();
     }
 
-    async function loginSuccess() {
-        try {
-            const res = await callBackend({ action: 'get_user_circles', memberId: currentUser.memberId });
-            authOverlay.classList.add('hidden');
-            showCirclePortal(res.circles || []);
-        } catch (e) {
-            console.error("LoginSuccess error:", e);
-            authOverlay.classList.remove('hidden');
-        }
-    }
-
-    // --- Circle Portal UI ---
-    function showCirclePortal(circles) {
+    // --- Portal Functions ---
+    async function showPortal() {
         portalOverlay.classList.remove('hidden');
         document.getElementById('portalUserName').textContent = currentUser.name;
-        const av = document.getElementById('portalUserAvatar');
-        if (currentUser.icon) { av.style.backgroundImage = `url('${currentUser.icon}')`; av.textContent=''; }
-        else av.textContent = currentUser.name.charAt(0);
+        const ava = document.getElementById('portalUserAvatar');
+        if (currentUser.avatar) { ava.style.backgroundImage = `url('${currentUser.avatar}')`; ava.textContent = ''; }
+        
+        renderPortalCircles();
+    }
 
-        const list = document.getElementById('myCirclesList');
-        list.innerHTML = '';
-        if (circles.length === 0) {
-            list.innerHTML = '<p style="font-size:11px; color:#bbb; text-align:center;">所属なし</p>';
-        }
-        circles.forEach(c => {
-            const btn = document.createElement('button');
-            btn.className = 'glass-btn';
-            btn.style.width = '100%'; btn.style.textAlign = 'left'; btn.style.fontSize = '13px';
-            btn.innerHTML = `<span class="material-icons-outlined" style="font-size:16px; margin-right:8px; vertical-align:middle;">group</span>${c.name}`;
-            btn.onclick = () => selectCircle(c.id);
-            list.appendChild(btn);
+    async function renderPortalCircles() {
+        const db = await callBackend({ action: 'getAllCircles' });
+        const myList = document.getElementById('myCirclesList');
+        const resultsList = document.getElementById('searchResultsList');
+        
+        myList.innerHTML = '';
+        resultsList.innerHTML = '';
+        
+        // My Circles (where joined = true)
+        const userToCircles = db.userToCircles[currentUser.id] || [];
+        userToCircles.forEach(cid => {
+            const c = db.circles[cid];
+            if (!c) return;
+            const item = document.createElement('div');
+            item.className = 'glass-btn';
+            item.style.marginBottom = '10px';
+            item.style.textAlign = 'left';
+            item.innerHTML = `<span>${c.name}</span> <span class="tag" style="float:right;">Enter</span>`;
+            item.onclick = () => loginToCircle(cid);
+            myList.appendChild(item);
+        });
+
+        // Other Circles (Search results)
+        Object.keys(db.circles).forEach(cid => {
+            if (userToCircles.includes(cid)) return;
+            const c = db.circles[cid];
+            const item = document.createElement('div');
+            item.className = 'glass-btn';
+            item.style.marginBottom = '10px';
+            item.style.textAlign = 'left';
+            const isPending = c.joinRequests && c.joinRequests.includes(currentUser.id);
+            item.innerHTML = `<span>${c.name}</span> <span class="tag" style="float:right; background:${isPending?'#ccc':''}">${isPending?'Pending':'Join'}</span>`;
+            if (!isPending) item.onclick = () => requestJoinCircle(cid);
+            resultsList.appendChild(item);
         });
     }
 
-    // Search Circle
-    document.getElementById('searchCircleBtn').onclick = async () => {
-        const query = document.getElementById('searchCircleInput').value;
-        if (!query) return;
-        const res = await callBackend({ action: 'search_circles', query: query });
-        const list = document.getElementById('searchResultsList');
-        list.innerHTML = '';
-        res.results.forEach(c => {
-            const div = document.createElement('div');
-            div.style.display='flex'; div.style.justifyContent='space-between'; div.style.alignItems='center';
-            div.style.background='rgba(0,0,0,0.03)'; div.style.padding='8px'; div.style.border='10px';
-            div.innerHTML = `<span style="font-size:12px; font-weight:600;">${c.name}</span> <button class="glass-btn primary" style="font-size:10px; padding:3px 8px;">申請</button>`;
-            div.querySelector('button').onclick = () => selectCircle(c.id);
-            list.appendChild(div);
-        });
-    };
-
-    // Create Circle
-    document.getElementById('showCreateCircleBtn').onclick = () => document.getElementById('create-circle-modal').classList.remove('hidden');
-    document.getElementById('cancelCreateCircle').onclick = () => document.getElementById('create-circle-modal').classList.add('hidden');
-    document.getElementById('confirmCreateCircle').onclick = async () => {
-        const name = document.getElementById('newCircleName').value;
-        if (!name) return;
-        const res = await callBackend({ action: 'create_circle', name: name, ownerId: currentUser.memberId });
-        if (res.success) {
-            document.getElementById('create-circle-modal').classList.add('hidden');
-            selectCircle(res.circleId);
-        }
-    };
-
-    async function selectCircle(circleId) {
-        const res = await callBackend({ action: 'select_circle', circleId: circleId, memberId: currentUser.memberId });
-        if (res.pending) {
-            alert('申請を送りました。リーダーの承認をお待ちください。');
-            return;
-        }
+    async function loginToCircle(cid) {
+        const res = await callBackend({ action: 'getCircleData', circleId: cid });
         if (res.success) {
             currentCircle = res.circle;
             portalOverlay.classList.add('hidden');
             appWrapper.style.display = 'flex';
             appWrapper.style.flexDirection = 'column';
             appWrapper.style.alignItems = 'center';
-            
+
+            document.getElementById('userNameDisplay').textContent = currentUser.name;
             const ua = document.getElementById('userAvatar');
-            if (currentUser.icon) { ua.style.backgroundImage = `url('${currentUser.icon}')`; ua.textContent = ''; }
-            else ua.textContent = currentUser.name.charAt(0);
-            
-            isAdminLogin = false;
-            window.currentChartMode = 'personal';
-            refreshDashboard();
+            if (currentUser.avatar) { ua.style.backgroundImage = `url('${currentUser.avatar}')`; ua.textContent = ''; }
+
+            updateDashboard();
         }
     }
 
-    document.getElementById('discordLoginBtn').onclick = () => {
-        const redirect = window.location.origin + window.location.pathname;
-        const authUrl = `https://discord.com/api/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirect)}&response_type=token&scope=identify`;
-        window.location.href = authUrl;
-    };
-
-    document.getElementById('logoutBtn').onclick = () => {
-        localStorage.removeItem('uma_current_user');
-        window.location.reload();
-    };
-
-    document.getElementById('switchCircleBtn').onclick = () => {
-        currentCircle = null;
-        isAdminLogin = false;
-        appWrapper.style.display = 'none';
-        loginSuccess();
-    };
-
-    // --- Admin Functions ---
-    document.getElementById('adminBtn').onclick = async () => {
-        const res = await callBackend({ action: 'get_db', circleId: currentCircle.id });
-        const db = res.db;
-        const currentAdminId = db.adminId || 'admin';
-        const currentAdminPass = db.adminPass || 'admin';
-        
-        const enteredId = prompt('管理者IDを入力してください');
-        if (enteredId !== currentAdminId) return alert('ID不一致');
-        const enteredPass = prompt('管理者パスワード');
-        if (enteredPass !== currentAdminPass) return alert('パス不一致');
-
-        isAdminLogin = true;
-        refreshDashboard();
-        showAdminModal(db);
-    };
-
-    function showAdminModal(db) {
-        document.getElementById('admin-modal').classList.remove('hidden');
-        document.getElementById('adminCircleNameInput').value = currentCircle.name;
-        document.getElementById('adminTotalTarget').value = db.totalTarget;
-        document.getElementById('adminDiscordInvite').value = db.discordInvite || '';
-        document.getElementById('adminDiscordWebhook').value = db.discordWebhook || '';
-        document.getElementById('adminIdInput').value = db.adminId || 'admin';
-        
-        // Requests
-        const reqList = document.getElementById('adminJoinRequests');
-        reqList.innerHTML = '';
-        const requests = db.joinRequests || [];
-        requests.forEach(r => {
-            const d = document.createElement('div');
-            d.style.display='flex'; d.style.justifyContent='space-between'; d.style.marginBottom='5px'; d.style.alignItems='center';
-            d.innerHTML = `<span style="font-size:12px;">${r.name}</span> <div><button onclick="window.handleRequest('${r.memberId}',true)" style="background:#2ed573; color:white; border:none; padding:3px 8px; border-radius:5px;">許可</button> <button onclick="window.handleRequest('${r.memberId}',false)" style="background:#ff4757; color:white; border:none; padding:3px 8px; border-radius:5px;">拒否</button></div>`;
-            reqList.appendChild(d);
-        });
-
-        // Members
-        const mList = document.getElementById('adminMemberList');
-        mList.innerHTML = '';
-        db.members.forEach(m => {
-            const label = document.createElement('label');
-            label.style.display='block'; label.style.fontSize='12px';
-            label.innerHTML = `<input type="checkbox" value="${m.memberId}"> ${m.name} (目標: ${(db.individualTargets[m.memberId]||3000000).toLocaleString()})`;
-            mList.appendChild(label);
-        });
+    async function requestJoinCircle(cid) {
+        await callBackend({ action: 'requestJoin', circleId: cid, userId: currentUser.id });
+        alert('参加申請を送りました！管理者の承認を待ってください。');
+        renderPortalCircles();
     }
 
-    window.handleRequest = async (mid, accept) => {
-        await callBackend({ action: 'handle_join_request', circleId: currentCircle.id, applicantId: mid, accept: accept });
-        document.getElementById('adminBtn').click();
-    };
-
-    document.getElementById('saveAdminBtn').onclick = async () => {
-        const payload = {
-            action: 'save_admin',
-            circleId: currentCircle.id,
-            name: document.getElementById('adminCircleNameInput').value,
-            totalTarget: parseInt(document.getElementById('adminTotalTarget').value),
-            discordWebhook: document.getElementById('adminDiscordWebhook').value,
-            discordInvite: document.getElementById('adminDiscordInvite').value,
-            adminId: document.getElementById('adminIdInput').value,
-            adminPass: document.getElementById('adminPassInput').value,
-            individualTargets: {}
-        };
-        await callBackend(payload);
-        alert('保存しました');
-        document.getElementById('admin-modal').classList.add('hidden');
-        refreshDashboard();
-    };
-
-    document.getElementById('closeAdmin').onclick = () => document.getElementById('admin-modal').classList.add('hidden');
-
-    // --- Dashboard Refresh & Charts ---
-    async function refreshDashboard() {
-        if (!currentCircle) return;
-        const res = await callBackend({ action: 'get_db', circleId: currentCircle.id });
-        const db = res.db;
-        currentCircle.name = db.name;
-        document.querySelectorAll('.circle-name-display').forEach(el => el.textContent = db.name);
+    // --- Dashboard Core ---
+    function updateDashboard() {
+        document.getElementById('circleNameDisplay').textContent = currentCircle.name;
         
+        // My Stats
+        const myData = currentCircle.members[currentUser.id] || { totalFans: 0, targetFans: 3000000, history: [] };
+        document.getElementById('displayTotalTarget').textContent = myData.targetFans.toLocaleString();
+        
+        const rem = Math.max(0, myData.targetFans - myData.totalFans);
+        document.getElementById('displayRemaining').textContent = rem.toLocaleString();
+        
+        const progress = Math.min(100, (myData.totalFans / myData.targetFans) * 100);
+        document.getElementById('totalFanProgress').style.width = progress + '%';
+        document.getElementById('totalFanPercentText').textContent = Math.floor(progress) + '%';
+
+        // Discord Link
         const dlink = document.getElementById('circleDiscordLink');
-        if (db.discordInvite) { dlink.href = db.discordInvite; dlink.style.display='flex'; } else { dlink.style.display='none'; }
-
-        refreshRanking();
-
-        const myFans = db.fans[currentUser.memberId] || 0;
-        const myTarget = db.individualTargets[currentUser.memberId] || 3000000;
-        const pct = Math.min(100, Math.floor((myFans/myTarget)*100));
-        document.getElementById('totalFanProgress').style.width = pct + '%';
-        document.getElementById('totalFanPercentText').textContent = pct + '%';
-        document.getElementById('displayTotalTarget').textContent = myTarget.toLocaleString();
-        document.getElementById('displayRemaining').textContent = Math.max(0, myTarget-myFans).toLocaleString();
-
-        const toggleBtn = document.getElementById('toggleChartBtn');
-        if (!window.currentChartMode) window.currentChartMode = 'personal';
-        toggleBtn.onclick = () => { 
-            window.currentChartMode = window.currentChartMode === 'personal' ? 'circle' : 'personal';
-            refreshDashboard();
-        };
-
-        if (window.currentChartMode === 'personal') {
-            document.getElementById('mainChartTitle').textContent = "My Fan Growth";
-            toggleBtn.textContent = "サークル全体を表示";
-            drawChart([myFans]); // Simplified for now
+        if (currentCircle.discordInvite) {
+            dlink.href = currentCircle.discordInvite;
+            dlink.style.display = 'flex';
         } else {
-            document.getElementById('mainChartTitle').textContent = "Circle Growth";
-            toggleBtn.textContent = "個人へ戻る";
-            drawChart([Object.values(db.fans).reduce((a,b)=>a+b,0)]);
+            dlink.style.display = 'none';
         }
 
-        // Render Members Clickable List
-        const mGrid = document.getElementById('membersGrid');
-        mGrid.innerHTML = '';
-        db.members.forEach(m => {
-            const d = document.createElement('div');
-            d.className = 'member-item';
-            d.style.textAlign='center'; d.style.cursor='pointer';
-            d.innerHTML = `<div class="member-avatar" style="background-image:url('${m.icon||''}'); margin:0 auto;">${m.icon?'':m.name.charAt(0)}</div><span style="font-size:10px;">${m.name}</span>`;
-            d.onclick = () => showMemberDetail(m, db);
-            mGrid.appendChild(d);
+        renderGrowthChart();
+        renderMembers();
+        renderRanking();
+    }
+
+    async function renderMembers() {
+        const grid = document.getElementById('membersGrid');
+        grid.innerHTML = '';
+        Object.keys(currentCircle.members).forEach(uid => {
+            const m = currentCircle.members[uid];
+            const div = document.createElement('div');
+            div.className = 'member-avatar-mini';
+            div.title = m.name;
+            if (m.icon) div.style.backgroundImage = `url('${m.icon}')`;
+            else div.textContent = m.name.substring(0, 1);
+            div.onclick = () => showMemberDetails(uid);
+            grid.appendChild(div);
         });
     }
 
-    async function refreshRanking() {
-        const res = await callBackend({ action: 'get_ranking' });
+    async function renderRanking() {
         const list = document.getElementById('circleRankingList');
-        if (!list) return;
         list.innerHTML = '';
-        res.ranking.forEach((c, idx) => {
-            const isMe = currentCircle && c.id === currentCircle.id;
-            const r = document.createElement('div');
-            r.style.padding='8px'; r.style.display='flex'; r.style.justifyContent='space-between';
-            r.style.background = isMe ? 'rgba(251,161,186,0.1)' : '#fff';
-            r.style.borderRadius = '8px'; r.style.cursor='pointer';
-            r.onclick = () => { if(!isMe && confirm(c.name+'へ参加申請/切替えますか？')) selectCircle(c.id); };
-            r.innerHTML = `<div style="display:flex; gap:10px;"><span style="font-weight:bold;">${idx+1}</span><span>${c.name}</span></div><span style="color:var(--primary); font-weight:bold;">${(c.totalFans/10000).toFixed(1)}万</span>`;
-            list.appendChild(r);
+        const db = await callBackend({ action: 'getAllCircles' });
+        const sorted = Object.values(db.circles).sort((a,b) => b.totalFans - a.totalFans).slice(0, 5);
+        
+        sorted.forEach((c, idx) => {
+            const item = document.createElement('div');
+            item.style = 'display:flex; justify-content:space-between; align-items:center; padding:10px; background:rgba(0,0,0,0.02); border-radius:12px;';
+            item.innerHTML = `
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <span style="font-weight:bold; color:var(--primary);">${idx+1}</span>
+                    <span style="font-weight:600; font-size:14px;">${c.name}</span>
+                </div>
+                <span class="tag">${(c.totalFans/10000).toFixed(1)}万</span>
+            `;
+            list.appendChild(item);
         });
     }
 
-    let mainChartInstance = null;
-    function drawChart(dataPoints) {
+    // --- Master Stats Logic ---
+    function openMasterStats() {
+        masterStatsOverlay.classList.remove('hidden');
+        renderMasterStats();
+    }
+
+    function renderMasterStats() {
+        const tbody = document.getElementById('circleLeaderboardBody');
+        tbody.innerHTML = '';
+        
+        const sorted = Object.values(currentCircle.members).sort((a,b) => b.totalFans - a.totalFans);
+        let circleTotal = 0;
+        let circleTarget = 0;
+
+        sorted.forEach((m, idx) => {
+            circleTotal += m.totalFans;
+            circleTarget += m.targetFans;
+            const progress = (m.totalFans / m.targetFans * 100).toFixed(1);
+            
+            const tr = document.createElement('tr');
+            tr.innerHTML = `
+                <td style="padding:12px; font-weight:bold;">${idx+1}</td>
+                <td style="padding:12px;">${m.name}</td>
+                <td style="padding:12px;">${m.totalFans.toLocaleString()}</td>
+                <td style="padding:12px;"><span class="tag">${progress}%</span></td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        // Overview
+        document.getElementById('masterTotalFanDisplay').textContent = `${(circleTotal/10000).toFixed(1)}万 / ${(circleTarget/10000).toFixed(1)}万`;
+        document.getElementById('masterTotalBar').style.width = Math.min(100, (circleTotal/circleTarget*100)) + '%';
+
+        // Weekly (Top 3 gainers - mock)
+        const weekly = document.getElementById('weeklyContributionList');
+        weekly.innerHTML = '';
+        sorted.slice(0, 3).forEach(m => {
+            const div = document.createElement('div');
+            div.innerHTML = `<span style="font-size:14px; font-weight:bold; color:var(--text-dark);">${m.name}</span> <span style="font-size:12px; float:right;">+${Math.floor(m.totalFans * 0.1).toLocaleString()} fans / week (est)</span>`;
+            weekly.appendChild(div);
+        });
+    }
+
+    // --- Event Listeners ---
+    document.getElementById('statsBtn').onclick = (e) => { e.preventDefault(); openMasterStats(); };
+    document.getElementById('closeStatsBtn').onclick = () => masterStatsOverlay.classList.add('hidden');
+    document.getElementById('switchCircleBtn').onclick = showPortal;
+    document.getElementById('logoutBtn').onclick = () => window.location.href = window.location.pathname;
+    document.getElementById('logoutBtnFromPortal').onclick = () => window.location.href = window.location.pathname;
+
+    // Admin
+    document.getElementById('adminBtn').onclick = (e) => {
+        e.preventDefault();
+        const pwd = prompt('管理者パスワードを入力してください:');
+        if (pwd === currentCircle.adminPass) {
+            document.getElementById('admin-modal').classList.remove('hidden');
+            document.getElementById('adminCircleNameInput').value = currentCircle.name;
+        } else {
+            alert('パスワードが違います');
+        }
+    };
+
+    // --- Chart Logic ---
+    let growthChart = null;
+    function renderGrowthChart() {
         const ctx = document.getElementById('growthChart').getContext('2d');
-        if (mainChartInstance) mainChartInstance.destroy();
-        mainChartInstance = new Chart(ctx, {
+        if (growthChart) growthChart.destroy();
+        
+        const labels = ['1週', '2週', '3週', '4週', '今日'];
+        const myData = currentCircle.members[currentUser.id].history || [0, 10, 20, 30, 45];
+        
+        growthChart = new Chart(ctx, {
             type: 'line',
-            data: { labels: ['1週','2週','3週','4週','今日'], datasets: [{ data: dataPoints, borderColor: '#fba1ba', tension: 0.4 }] },
+            data: {
+                labels,
+                datasets: [{
+                    label: 'Fan Growth',
+                    data: myData,
+                    borderColor: '#fba1ba',
+                    backgroundColor: 'rgba(251,161,186,0.1)',
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 5
+                }]
+            },
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
         });
     }
 
-    function showMemberDetail(m, db) {
-        const overlay = document.getElementById('member-drawer-overlay');
-        const drawer = document.getElementById('section-member-details');
-        document.getElementById('detail-name').textContent = m.name;
-        document.getElementById('detail-fan').textContent = `${(db.fans[m.memberId]||0).toLocaleString()} / ${(db.individualTargets[m.memberId]||3000000).toLocaleString()}`;
-        overlay.classList.remove('hidden');
-        setTimeout(() => drawer.style.transform = 'translateX(0)', 10);
-    }
-    document.getElementById('close-drawer-btn').onclick = () => {
-        const drawer = document.getElementById('section-member-details');
-        drawer.style.transform = 'translateX(-100%)';
-        setTimeout(() => document.getElementById('member-drawer-overlay').classList.add('hidden'), 400);
-    };
-
-    // --- Clipboard / Upload ---
+    // Capture Paste (Image Upload)
     window.addEventListener('paste', async (e) => {
-        const item = e.clipboardData.items[0];
-        if (item && item.type.indexOf('image') !== -1) {
-            const blob = item.getAsFile();
-            const reader = new FileReader();
-            reader.onload = async (ev) => {
-                const res = await callBackend({ action: 'upload', circleId: currentCircle.id, memberId: currentUser.memberId });
-                alert(`ファン数を +${res.detectedFans.toLocaleString()} 加算しました！`);
-                refreshDashboard();
-            };
-            reader.readAsDataURL(blob);
+        const items = e.clipboardData.items;
+        for (let item of items) {
+            if (item.type.indexOf('image') !== -1) {
+                const blob = item.getAsFile();
+                alert('画像を検知しました。OCR解析（モック）を実行してファン数を更新します...');
+                
+                // OCR Mock: Random increase
+                const increase = Math.floor(Math.random() * 500000) + 100000;
+                await callBackend({ action: 'updateFans', circleId: currentCircle.id, userId: currentUser.id, fans: (currentCircle.members[currentUser.id].totalFans + increase) });
+                
+                const res = await callBackend({ action: 'getCircleData', circleId: currentCircle.id });
+                currentCircle = res.circle;
+                updateDashboard();
+            }
         }
     });
 
-    // --- Mock Backend ---
-    async function callBackend(data) {
-        return new Promise(res => {
-            setTimeout(() => {
-                let db;
-                try {
-                    const raw = localStorage.getItem(DB_KEY);
-                    db = JSON.parse(raw || '{"circles":{}, "userToCircles":{}}');
-                    if (raw && !db.circles) { db = {"circles":{}, "userToCircles":{}}; localStorage.setItem(DB_KEY, JSON.stringify(db)); }
-                } catch(e) { db = {"circles":{}, "userToCircles":{}}; }
-                
-                if (data.action === 'get_user_circles') {
-                    const ids = db.userToCircles[data.memberId] || [];
-                    const list = ids.map(id => ({ id: id, name: db.circles[id] ? db.circles[id].name : 'Unknown' }));
-                    res({ success: true, circles: list.filter(x => x.name !== 'Unknown') });
-                }
-                else if (data.action === 'create_circle') {
-                    const id = 'c_' + Math.random().toString(36).substr(2, 9);
-                    db.circles[id] = { id:id, name:data.name, ownerId:data.ownerId, members:[{memberId:data.ownerId, name:currentUser.name}], fans:{}, individualTargets:{}, joinRequests:[] };
-                    if (!db.userToCircles[data.ownerId]) db.userToCircles[data.ownerId] = [];
-                    db.userToCircles[data.ownerId].push(id);
-                    localStorage.setItem(DB_KEY, JSON.stringify(db));
-                    res({ success:true, circleId:id });
-                }
-                else if (data.action === 'search_circles') {
-                    const list = Object.keys(db.circles).map(k => db.circles[k]).filter(c => c.name.includes(data.query));
-                    res({ success:true, results: list });
-                }
-                else if (data.action === 'select_circle') {
-                    const c = db.circles[data.circleId];
-                    if (!c) return res({ success:false });
-                    const isM = c.members.find(m => m.memberId === data.memberId);
-                    if (isM) { res({ success:true, circle: {id:data.circleId, name:c.name} }); }
-                    else {
-                        c.joinRequests = c.joinRequests || [];
-                        if(!c.joinRequests.find(r=>r.memberId===data.memberId)) c.joinRequests.push({memberId:data.memberId, name:currentUser.name});
-                        localStorage.setItem(DB_KEY, JSON.stringify(db));
-                        res({ success:true, pending:true });
-                    }
-                }
-                else if (data.action === 'get_db') {
-                    res({ success:true, db: db.circles[data.circleId] });
-                }
-                else if (data.action === 'save_admin') {
-                    const c = db.circles[data.circleId];
-                    if(data.name) c.name = data.name;
-                    c.totalTarget = data.totalTarget;
-                    c.discordWebhook = data.discordWebhook;
-                    c.discordInvite = data.discordInvite;
-                    c.adminId = data.adminId; if(data.adminPass) c.adminPass=data.adminPass;
-                    localStorage.setItem(DB_KEY, JSON.stringify(db));
-                    res({ success:true });
-                }
-                else if (data.action === 'get_ranking') {
-                    const ranking = Object.keys(db.circles).map(id => {
-                        const c = db.circles[id];
-                        const total = Object.values(c.fans).reduce((a,b)=>a+b,0);
-                        return { id:id, name:c.name, totalFans:total };
-                    }).sort((a,b)=>b.totalFans-a.totalFans);
-                    res({ success:true, ranking:ranking });
-                }
-                else if (data.action === 'upload') {
-                    const c = db.circles[data.circleId];
-                    c.fans[data.memberId] = (c.fans[data.memberId]||0) + 120000;
-                    localStorage.setItem(DB_KEY, JSON.stringify(db));
-                    res({ success:true, detectedFans: 120000 });
-                }
-                else if (data.action === 'handle_join_request') {
-                    const c = db.circles[data.circleId];
-                    c.joinRequests = (c.joinRequests||[]).filter(r=>r.memberId!==data.applicantId);
-                    if (data.accept) {
-                        c.members.push({memberId:data.applicantId, name:data.applicantId}); // Simplified
-                        if(!db.userToCircles[data.applicantId]) db.userToCircles[data.applicantId]=[];
-                        db.userToCircles[data.applicantId].push(data.circleId);
-                    }
-                    localStorage.setItem(DB_KEY, JSON.stringify(db));
-                    res({success:true});
-                }
-            }, 100);
-        });
-    }
+    // Close Modals
+    document.getElementById('closeAdmin').onclick = () => document.getElementById('admin-modal').classList.add('hidden');
+
 });
+
+// --- Mock Backend Logic ---
+async function callBackend(params) {
+    let db = JSON.parse(localStorage.getItem(DB_KEY));
+    if (!db) {
+        db = {
+            circles: {
+                'circle-1': { id: 'circle-1', name: 'NPC@サークル', adminId: 'admin', adminPass: '1234', totalFans: 1500000, members: { 'npc-1': { name: 'NPC長', totalFans: 500000, targetFans: 3000000, history: [0, 100, 250, 400, 500] } } }
+            },
+            userToCircles: {}
+        };
+        localStorage.setItem(DB_KEY, JSON.stringify(db));
+    }
+
+    if (params.action === 'init') return db;
+    if (params.action === 'getAllCircles') return db;
+    if (params.action === 'getCircleData') return { success: true, circle: db.circles[params.circleId] };
+    
+    if (params.action === 'requestJoin') {
+        const c = db.circles[params.circleId];
+        if (!c.joinRequests) c.joinRequests = [];
+        if (!c.joinRequests.includes(params.userId)) c.joinRequests.push(params.userId);
+        localStorage.setItem(DB_KEY, JSON.stringify(db));
+        return { success: true };
+    }
+
+    if (params.action === 'updateFans') {
+        const c = db.circles[params.circleId];
+        const m = c.members[params.userId];
+        if (m) {
+            m.totalFans = params.fans;
+            if (!m.history) m.history = [];
+            m.history.push(params.fans);
+        } else {
+            // Join first time if not exist (mock auto-join for safety)
+            c.members[params.userId] = { name: currentUser.name, totalFans: params.fans, targetFans: 3000000, history: [params.fans], icon: currentUser.avatar };
+        }
+        
+        // Update circle total
+        c.totalFans = Object.values(c.members).reduce((sum, member) => sum + member.totalFans, 0);
+        localStorage.setItem(DB_KEY, JSON.stringify(db));
+        return { success: true };
+    }
+
+    return db;
+}
