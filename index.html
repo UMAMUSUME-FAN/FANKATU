@@ -12,27 +12,16 @@
 <body>
     <!-- Auth Overlay (ログイン) -->
     <div id="authOverlay" class="auth-overlay">
-        <div class="auth-card">
-            <h1 style="font-family: 'Playfair Display', serif; font-size: 32px; color: #4a282f;">Uma Tracker</h1>
-            <p style="color: #9d8e90; margin-bottom: 20px;">サークル専用ダッシュボード</p>
-            
-            <div style="display:flex; margin-bottom: 20px;">
-                <button class="auth-tab active" id="tab-login" style="flex:1; padding:10px; border:none; background:transparent; border-bottom:2px solid #fba1ba; font-weight:bold;">ログイン</button>
-                <button class="auth-tab" id="tab-register" style="flex:1; padding:10px; border:none; background:transparent; border-bottom:2px solid #eee; color:#bbb; font-weight:bold;">新規登録</button>
-            </div>
-            
-            <form id="form-login">
-                <input type="text" id="login-name" class="glass-input" required placeholder="メンバー名" style="margin-bottom:15px;">
-                <input type="password" id="login-pass" class="glass-input" required placeholder="パスワード" style="margin-bottom:15px;">
-                <button type="submit" class="glass-btn primary" style="width:100%; margin-bottom:10px;">ログイン</button>
-            </form>
-            
-            <form id="form-register" class="hidden">
-                <input type="text" id="reg-name" class="glass-input" required placeholder="登録する名前" style="margin-bottom:15px;">
-                <input type="password" id="reg-pass" class="glass-input" required placeholder="パスワード" style="margin-bottom:15px;">
-                <button type="submit" class="glass-btn primary" style="width:100%; margin-bottom:10px;">登録</button>
-            </form>
-            <div id="auth-message" style="color:#ff6b6b; font-size:14px;"></div>
+        <div class="auth-card" style="padding: 40px;">
+            <h1 style="font-family:'Playfair Display', serif; margin-bottom:10px; font-size:32px;">Uma Tracker</h1>
+            <p style="color:#9d8e90; font-size:14px; margin-bottom:40px;">サークル専用ダッシュボード</p>
+
+            <button id="discordLoginBtn" class="glass-btn" style="width:100%; display:flex; align-items:center; justify-content:center; gap:15px; background-color:#5865F2; color:white; border-radius:15px; padding:15px; font-size:16px;">
+                <img src="https://assets-global.website-files.com/6257adef93867e50d84d30e2/636e0a6918e57475a843f59f_icon_clyde_blurple_RGB.svg" alt="Discord" style="width:24px; height:24px; filter:brightness(0) invert(1);">
+                <span>Discordで認証して開始</span>
+            </button>
+
+            <p id="auth-message" style="color:red; font-size:12px; margin-top:20px; min-height:15px;"></p>
         </div>
     </div>
 
@@ -97,9 +86,12 @@
 
             <!-- Right Column Top (Growth Chart) -->
             <div class="side-card glass-panel chart-panel" id="statsCard">
-                <div class="card-header">
-                    <h3>Fan Count Growth</h3>
-                    <p>サークル全体の累積ファン数</p>
+                <div class="card-header" style="display:flex; justify-content:space-between; align-items:flex-start;">
+                    <div>
+                        <h3 id="mainChartTitle">Fan Count Growth</h3>
+                        <p id="mainChartDesc">サークル全体の推移</p>
+                    </div>
+                    <button class="glass-btn primary" id="toggleChartBtn" style="padding: 5px 12px; font-size:11px;">個人の推移を表示</button>
                 </div>
                 <!-- Canvas container needs careful sizing -->
                 <div style="position:relative; height: 180px; width: 100%;">

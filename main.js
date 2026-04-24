@@ -6,46 +6,67 @@ let activeDrawerMemberId = null;
 document.addEventListener('DOMContentLoaded', () => {
     const authOverlay = document.getElementById('authOverlay');
     const appWrapper = document.getElementById('appWrapper');
-    const formLogin = document.getElementById('form-login');
-    const formRegister = document.getElementById('form-register');
     const authMessage = document.getElementById('auth-message');
-    
-    document.getElementById('tab-login').onclick = (e) => {
-        e.target.classList.add('active');
-        document.getElementById('tab-register').classList.remove('active');
-        document.getElementById('tab-register').style.color = '#bbb';
-        document.getElementById('tab-register').style.borderBottomColor = '#eee';
-        e.target.style.color = 'var(--text-dark)';
-        e.target.style.borderBottomColor = '#fba1ba';
-        formLogin.classList.remove('hidden');
-        formRegister.classList.add('hidden');
-    };
-    document.getElementById('tab-register').onclick = (e) => {
-        e.target.classList.add('active');
-        document.getElementById('tab-login').classList.remove('active');
-        document.getElementById('tab-login').style.color = '#bbb';
-        document.getElementById('tab-login').style.borderBottomColor = '#eee';
-        e.target.style.color = 'var(--text-dark)';
-        e.target.style.borderBottomColor = '#fba1ba';
-        formRegister.classList.remove('hidden');
-        formLogin.classList.add('hidden');
-    };
 
-    const savedUser = localStorage.getItem('uma_current_user');
-    if (savedUser) { currentUser = JSON.parse(savedUser); loginSuccess(); }
+    // Discord OAuth2 Settings
+    const DISCORD_CLIENT_ID = '1497168159210340484';
+    const DISCORD_REDIRECT_URI = 'https://umamusume-fan.github.io/FANKATU/';
 
-    formLogin.onsubmit = async (e) => {
-        e.preventDefault();
-        const res = await callBackend({ action: 'login', name: document.getElementById('login-name').value, password: document.getElementById('login-pass').value });
-        if (res.success) { currentUser = res; localStorage.setItem('uma_current_user', JSON.stringify(res)); loginSuccess(); }
-        else authMessage.textContent = res.error;
-    };
+    // --- 1. Process Discord Implicit Flow Token ---
+    const fragment = new URLSearchParams(window.location.hash.slice(1));
+    const accessToken = fragment.get('access_token');
+    const tokenType = fragment.get('token_type');
 
-    formRegister.onsubmit = async (e) => {
-        e.preventDefault();
-        const res = await callBackend({ action: 'register', name: document.getElementById('reg-name').value, password: document.getElementById('reg-pass').value });
-        if (res.success) { currentUser = { memberId: res.memberId, name: res.name, icon: '' }; localStorage.setItem('uma_current_user', JSON.stringify(currentUser)); loginSuccess(); }
-        else authMessage.textContent = res.error;
+    if (accessToken) {
+        window.history.replaceState({}, document.title, window.location.pathname); // URLを綺麗にする
+        authMessage.textContent = "Discordで認証中...";
+        authMessage.style.color = "#5865F2";
+        
+        fetch('https://discord.com/api/users/@me', {
+            headers: { authorization: `${tokenType} ${accessToken}` }
+        })
+        .then(result => result.json())
+        .then(async response => {
+            if (response.id) {
+                const displayName = response.global_name || response.username;
+                const avatarIcon = response.avatar ? `https://cdn.discordapp.com/avatars/${response.id}/${response.avatar}.png` : '';
+                
+                // DB側への登録処理
+                const res = await callBackend({ 
+                    action: 'discord_login', 
+                    memberId: response.id, 
+                    name: displayName, 
+                    icon: avatarIcon 
+                });
+
+                if (res.success) {
+                    currentUser = { memberId: response.id, name: displayName, icon: avatarIcon };
+                    localStorage.setItem('uma_current_user', JSON.stringify(currentUser));
+                    loginSuccess();
+                } else {
+                    authMessage.textContent = "データベースへの登録に失敗しました";
+                    authMessage.style.color = "red";
+                }
+            } else {
+                authMessage.textContent = "Discord認証に失敗しました";
+                authMessage.style.color = "red";
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            authMessage.textContent = "ネットワークエラーが発生しました";
+            authMessage.style.color = "red";
+        });
+    } else {
+        // 通常のロード処理
+        const savedUser = localStorage.getItem('uma_current_user');
+        if (savedUser) { currentUser = JSON.parse(savedUser); loginSuccess(); }
+    }
+
+    // --- 2. Click button to Auth ---
+    document.getElementById('discordLoginBtn').onclick = () => {
+        const authUrl = `https://discord.com/api/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&redirect_uri=${encodeURIComponent(DISCORD_REDIRECT_URI)}&response_type=token&scope=identify`;
+        window.location.href = authUrl;
     };
 
     document.getElementById('logoutBtn').onclick = () => {
@@ -59,6 +80,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const ua = document.getElementById('userAvatar');
         if (currentUser.icon) { ua.style.backgroundImage = `url('${currentUser.icon}')`; ua.textContent = ''; }
         else ua.textContent = currentUser.name.charAt(0);
+        
+        window.currentChartMode = 'personal'; // 初回表示は自分
         refreshDashboard();
     }
 
@@ -199,12 +222,35 @@ document.addEventListener('DOMContentLoaded', () => {
             if (res.success) {
                 // Discord Webhook (もし設定されていれば)
                 if (window.discordWebhookUrl) {
+                    // ペース計算（15日〜20日の間なら警告メンションを飛ばす）
+                    const today = new Date();
+                    const d = today.getDate();
+                    let warningText = "";
+                    let isDanger = false;
+                    
+                    if (d >= 15 && d <= 20) {
+                        const dbRef = await callBackend({ action: 'get_db' });
+                        const myTarget = dbRef.db.individualTargets[currentUser.memberId] || 3000000;
+                        const myCurrent = dbRef.db.fans[currentUser.memberId] || 0;
+                        
+                        const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+                        const dailyAvg = myCurrent / d;
+                        const projected = dailyAvg * daysInMonth;
+                        
+                        if (projected < myTarget) {
+                            warningText = `\n⚠️ <@${currentUser.memberId}> 今のペースだと月末予測が **${Math.floor(projected).toLocaleString()}人** となり、目標に届かない危険性があります！頑張って！`;
+                            isDanger = true;
+                        }
+                    }
+
                     const message = {
+                        // メンションを確実に通知させるためのプロパティ
+                        content: isDanger ? `<@${currentUser.memberId}>` : "",
                         embeds: [{
                             title: "🎉 サークル活動進捗！",
-                            color: 16490938, // ピンク
+                            color: isDanger ? 16711680 : 16490938, // 危険なら赤、通常はピンク
+                            description: `**${currentUser.name}** がファン数データを更新しました！${warningText}`,
                             fields: [
-                                { name: "メンバー名", value: currentUser.name, inline: true },
                                 { name: "今回の獲得ファン数", value: `+${res.detectedFans.toLocaleString()}人`, inline: true }
                             ]
                         }]
@@ -250,13 +296,34 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('displayTotalTarget').textContent = myTarget.toLocaleString();
         document.getElementById('displayRemaining').textContent = rem.toLocaleString();
 
-        // 自分が管理者の場合は全員の重ね合わせグラフ、そうでない場合は自分のグラフを表示
-        if (window.isAdminLogin) {
-            document.querySelector('#statsCard p').textContent = "サークル全員の推移（管理者ビュー）";
-            drawAdminOverlayChart(db);
-        } else {
-            document.querySelector('#statsCard p').textContent = "あなたのファン数推移";
+        // チャートの表示切替機能
+        const toggleBtn = document.getElementById('toggleChartBtn');
+        const cTitle = document.getElementById('mainChartTitle');
+        const cDesc = document.getElementById('mainChartDesc');
+
+        if (!window.currentChartMode) window.currentChartMode = 'personal';
+        
+        toggleBtn.onclick = () => {
+            window.currentChartMode = window.currentChartMode === 'personal' ? 'circle' : 'personal';
+            refreshDashboard();
+        };
+
+        if (window.currentChartMode === 'personal') {
+            cTitle.textContent = "My Fan Growth";
+            cDesc.textContent = "あなたのファン数推移";
+            toggleBtn.textContent = "サークル全体を表示";
             drawMyChart(myFans);
+        } else {
+            cTitle.textContent = "Circle Growth";
+            if (window.isAdminLogin) {
+                cDesc.textContent = "サークル全員の推移（管理者ビュー）";
+                toggleBtn.textContent = "個人の推移を表示";
+                drawAdminOverlayChart(db);
+            } else {
+                cDesc.textContent = "サークル全体の累積ファン数";
+                toggleBtn.textContent = "個人の推移を表示";
+                drawCircleTotalChart(db);
+            }
         }
 
         const mgrid = document.getElementById('membersGrid');
@@ -271,6 +338,12 @@ document.addEventListener('DOMContentLoaded', () => {
             else mdiv.innerHTML = m.name.charAt(0);
             
             mdiv.onclick = () => {
+                // 自分自身か、管理者ログイン状態の時のみ詳細画面を開ける
+                if (!window.isAdminLogin && m.memberId !== currentUser.memberId) {
+                    alert('プライバシー保護のため、他のメンバーの詳細データは管理者のみ閲覧可能です。（※自分のデータは見ることができます）');
+                    return;
+                }
+
                 document.getElementById('detail-name').textContent = m.name;
                 document.getElementById('detail-avatar').innerHTML = m.icon ? '' : m.name.charAt(0);
                 document.getElementById('detail-avatar').style.backgroundImage = m.icon ? `url('${m.icon}')` : 'none';
@@ -292,6 +365,30 @@ document.addEventListener('DOMContentLoaded', () => {
             wrap.appendChild(mdiv);
             wrap.innerHTML += `<span class="member-name-mini">${m.name}</span>`;
             mgrid.appendChild(wrap);
+        });
+    }
+
+    // --- Chart: Circle Total ---
+    function drawCircleTotalChart(db) {
+        const ctx = document.getElementById('growthChart');
+        if (!ctx) return;
+        if (myChart) myChart.destroy();
+        
+        let totalF = 0;
+        db.members.forEach(m => {
+            if (!(db.frozen && db.frozen[m.memberId])) {
+                totalF += (db.fans[m.memberId] || 0);
+            }
+        });
+        
+        let baseFans = totalF * 0.4;
+        let step = (totalF - baseFans) / 5;
+        const dataPoints = [Math.floor(baseFans), Math.floor(baseFans + step), Math.floor(baseFans + step*2), Math.floor(baseFans + step*3), Math.floor(baseFans + step*4), totalF];
+        
+        myChart = new Chart(ctx, {
+            type: 'line',
+            data: { labels: ['1週目', '2週目', '3週目', '4週目', '昨日', '今日'], datasets: [{ label: 'サークル合計ファン数', data: dataPoints, borderColor: '#a1c4fb', backgroundColor: 'rgba(161, 196, 251, 0.2)', fill: true, tension: 0.4 }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: true }, y: { display: true, ticks: { callback: v => v >= 10000 ? (v/10000)+'万' : v } } } }
         });
     }
 
@@ -410,16 +507,17 @@ document.addEventListener('DOMContentLoaded', () => {
         return new Promise(res => {
             setTimeout(() => {
                 let db = JSON.parse(localStorage.getItem(DB_KEY) || '{"members":[], "fans":{}, "individualTargets":{}, "totalTarget":100000000}');
-                if (data.action === 'register') {
-                    if (db.members.find(m => m.name === data.name)) return res({success:false, error:'既に使われています'});
-                    const id = 'M' + Date.now();
-                    db.members.push({ memberId: id, name: data.name, pass: data.password, icon: '' });
-                    localStorage.setItem(DB_KEY, JSON.stringify(db)); res({ success: true, memberId: id, name: data.name });
-                }
-                else if (data.action === 'login') {
-                    const m = db.members.find(m => m.name === data.name && m.pass === data.password);
-                    if (m) res({ success: true, memberId: m.memberId, name: m.name, icon: m.icon });
-                    else res({ success: false, error: '違います' });
+                if (data.action === 'discord_login') {
+                    let m = db.members.find(x => x.memberId === data.memberId);
+                    if (!m) {
+                        m = { memberId: data.memberId, name: data.name, icon: data.icon };
+                        db.members.push(m);
+                    } else {
+                        m.name = data.name;
+                        if (!m.icon || data.icon) m.icon = data.icon; 
+                    }
+                    localStorage.setItem(DB_KEY, JSON.stringify(db));
+                    res({ success: true, memberId: m.memberId, name: m.name, icon: m.icon });
                 }
                 else if (data.action === 'update_profile') {
                     db.members.find(m => m.memberId === data.memberId).icon = data.icon;
