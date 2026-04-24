@@ -131,7 +131,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         showToast("AIがファン数を全自動解析中...🔍", "info");
         const pureBase64 = base64Data.split(',')[1];
         try {
-            const response = await fetch(`https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${AI_KEY}`, {
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${AI_KEY}`, {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     contents: [{ parts: [
