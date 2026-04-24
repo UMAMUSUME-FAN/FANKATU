@@ -205,8 +205,21 @@ document.addEventListener('DOMContentLoaded', async () => {
         } finally { btn.disabled = false; }
     };
 
+    // Enterキーで投稿
+    timelineInput.onkeydown = (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            document.getElementById('postTimelineBtn').click();
+        }
+    };
+
     // --- Drag and Drop / Paste ---
     const timelineCard = document.getElementById('timelineCard');
+    const timelineInput = document.getElementById('timelineInput');
+    
+    // 掲示板のどこでもクリックすれば自動で入力モードになり、すぐ貼り付けられるようにする
+    timelineCard.onclick = () => timelineInput.focus();
+
     timelineCard.ondragover = (e) => { e.preventDefault(); timelineCard.classList.add('drag-over'); };
     timelineCard.ondragleave = () => timelineCard.classList.remove('drag-over');
     timelineCard.ondrop = (e) => {
