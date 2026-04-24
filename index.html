@@ -220,6 +220,17 @@
 
             <div class="scroll-list" style="height:400px; padding-right:10px;">
                 <div class="form-group"><label>サークル名</label><input type="text" id="adminCircleNameInput" class="glass-input" placeholder="サークル名を入力"></div>
+                
+                <!-- 招待URL発行セクション -->
+                <div class="form-group" style="background:rgba(251,161,186,0.05); padding:15px; border-radius:15px; border:1px solid rgba(251,161,186,0.1); margin-bottom:20px;">
+                    <label style="color:var(--primary); font-weight:bold;">✉️ メンバー招待URL</label>
+                    <p style="font-size:10px; color:var(--text-muted); margin-bottom:10px;">このURLを共有すると、受け取った人は承認なしで即座に入部できます。</p>
+                    <div style="display:flex; gap:10px;">
+                        <input type="text" id="inviteUrlDisplay" class="glass-input" readonly style="font-size:11px; opacity:0.7;" value="発行ボタンを押してください...">
+                        <button id="copyInviteUrlBtn" class="glass-btn primary" style="width:140px; font-size:12px;">URLを発行・コピー</button>
+                    </div>
+                </div>
+
                 <div class="form-group"><label>承認済みの参加申請</label><div id="adminJoinRequests" class="inner-box" style="font-size:12px; color:var(--text-muted);">承認済みのメンバーが表示されます。</div></div>
                 <div class="form-group">
                     <label>メンバーの個別目標（ノルマ）</label>

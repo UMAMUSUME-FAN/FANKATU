@@ -32,7 +32,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             const du = await userRes.json();
             currentUser = { id: du.id, name: du.username, avatar: `https://cdn.discordapp.com/avatars/${du.id}/${du.avatar}.png` };
             if(authOverlay) authOverlay.classList.add('hidden');
-            showPortal();
+            
+            // 招待URL経由なら自動加入へ、そうでなければポータル表示
+            if (joinCid) {
+                await handleAutoJoin();
+            } else {
+                showPortal();
+            }
         } catch(e) { console.error("Auth Fail", e); }
     }
 
@@ -53,15 +59,15 @@ document.addEventListener('DOMContentLoaded', async () => {
         userToCircles.forEach(cid => {
             const c = db.circles[cid]; if(!c) return;
             const div = document.createElement('div'); div.className = 'glass-btn'; div.style.marginBottom = '10px';
-            div.innerHTML = `<span>${c.name}</span> <span class="tag" style="float:right;">Enter</span>`;
+            div.innerHTML = `<span>${c.name}</span> <span class="tag" style="float:right; background:var(--primary); color:white;">入室する</span>`;
             div.onclick = () => loginToCircle(cid); myList.appendChild(div);
         });
         Object.keys(db.circles).forEach(cid => {
             if (userToCircles.includes(cid)) return;
             const c = db.circles[cid];
             const div = document.createElement('div'); div.className = 'glass-btn'; div.style.marginBottom = '10px';
-            div.innerHTML = `<span>${c.name}</span> <span class="tag" style="float:right;">Join</span>`;
-            div.onclick = () => showToast("現在、参加申請は受け付けていません"); resultsList.appendChild(div);
+            div.innerHTML = `<span>${c.name}</span> <span class="tag" style="float:right;">参加申請</span>`;
+            div.onclick = () => showToast("現在、新規の参加申請は締め切っています"); resultsList.appendChild(div);
         });
     }
 
@@ -69,11 +75,30 @@ document.addEventListener('DOMContentLoaded', async () => {
         const res = await callBackend({ action: 'getCircleData', circleId: cid });
         if (res.success) {
             currentCircle = res.circle;
+
+            // --- 正会員としてメンバー登録を保証 ---
+            const uid = currentUser?.id || 'guest';
+            if (!currentCircle.members || !currentCircle.members[uid]) {
+                const def = currentCircle.defaultTarget || 3000000;
+                if(!currentCircle.members) currentCircle.members = {};
+                currentCircle.members[uid] = { 
+                    name: (currentUser?.name || 'Trainer'), 
+                    totalFans: 0, 
+                    targetFans: def, 
+                    history: [], 
+                    icon: (currentUser?.avatar || '') 
+                };
+                // データベースへ保存 (初期化)
+                await callBackend({ action: 'updateFans', circleId: cid, fans: 0 });
+            }
+
             if(portalOverlay) portalOverlay.classList.add('hidden');
             if(appWrapper) appWrapper.style.display = 'flex';
             const nameDisp = document.getElementById('userNameDisplay'); if(nameDisp) nameDisp.textContent = currentUser.name;
             const ua = document.getElementById('userAvatar'); if(currentUser.avatar && ua) ua.style.backgroundImage = `url('${currentUser.avatar}')`;
-            updateDashboard();
+            
+            // 最新データを読み直して全体反映
+            await updateDataAndUI();
         }
     }
 
@@ -425,6 +450,36 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
+    // --- Invite URL Logic (一気に加入させる魔法) ---
+    const copyInviteBtn = document.getElementById('copyInviteUrlBtn');
+    if(copyInviteBtn) copyInviteBtn.onclick = () => {
+        if(!currentCircle) return;
+        const base = window.location.origin + window.location.pathname;
+        const inviteUrl = `${base}?join=${currentCircle.id}`;
+        const display = document.getElementById('inviteUrlDisplay');
+        if(display) display.value = inviteUrl;
+        
+        navigator.clipboard.writeText(inviteUrl).then(() => {
+            showToast("招待URLをコピーしました！");
+        });
+    };
+
+    // 起動時に招待パラメータをチェック
+    const urlParams = new URLSearchParams(window.location.search);
+    const joinCid = urlParams.get('join');
+
+    async function handleAutoJoin() {
+        if (joinCid && currentUser) {
+            showToast("招待URLからサークルに参加中...");
+            // URLからパラメータを消す
+            window.history.replaceState({}, document.title, window.location.pathname);
+            
+            // 参加処理
+            await callBackend({ action: 'joinCircle', circleId: joinCid });
+            loginToCircle(joinCid);
+        }
+    }
+
     // --- Admin Event Listeners ---
     const closeAdminCover = document.getElementById('closeAdmin');
     if(closeAdminCover) closeAdminCover.onclick = () => { const am = document.getElementById('admin-modal'); if(am) am.classList.add('hidden'); };
@@ -534,6 +589,15 @@ async function callBackend(p) {
     if (p.action === 'updateAllTargets') {
         targetCircle.defaultTarget = p.target; // サークル全体の標準目標を更新
         Object.values(targetCircle.members).forEach(m => { m.targetFans = p.target; });
+        localStorage.setItem(DB_KEY, JSON.stringify(db));
+        return { success: true };
+    }
+
+    if (p.action === 'joinCircle') {
+        if (!db.userToCircles[currentUser.id]) db.userToCircles[currentUser.id] = [];
+        if (!db.userToCircles[currentUser.id].includes(p.circleId)) {
+            db.userToCircles[currentUser.id].push(p.circleId);
+        }
         localStorage.setItem(DB_KEY, JSON.stringify(db));
         return { success: true };
     }
