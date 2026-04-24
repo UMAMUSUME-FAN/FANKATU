@@ -78,31 +78,59 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     async function updateDataAndUI() {
+        // DBから最新情報を取得してローカル変数を確実に更新
         const db = await callBackend({ action: 'getAllCircles' });
         const cid = currentCircle ? currentCircle.id : 'circle-1';
         const res = await callBackend({ action: 'getCircleData', circleId: cid });
-        if(res.success) { currentCircle = res.circle; updateDashboard(); }
+        if(res.success) { 
+            currentCircle = res.circle; 
+            // ユーザー情報が未登録なら初期化
+            const uid = currentUser?.id || 'guest';
+            if(!currentCircle.members[uid]) {
+                currentCircle.members[uid] = { name: (currentUser?.name || 'Trainer'), totalFans: 0, targetFans: 3000000, history: [], icon: (currentUser?.avatar || '') };
+            }
+            updateDashboard(); 
+        }
     }
 
     function updateDashboard() {
         if(!currentCircle) return;
         const c = currentCircle;
+        const uid = currentUser?.id || 'guest';
+        const my = c.members[uid] || { totalFans: 0, targetFans: 3000000, history: [] };
+        
         const cName = document.getElementById('circleNameDisplay'); if(cName) cName.textContent = c.name;
-        const my = c.members[currentUser.id] || { totalFans: 0, targetFans: 3000000, history: [] };
         const dt = document.getElementById('displayTotalTarget'); if(dt) dt.textContent = my.targetFans.toLocaleString();
-        const dr = document.getElementById('displayRemaining'); if(dr) dr.textContent = Math.max(0, my.targetFans - my.totalFans).toLocaleString();
-        const tp = document.getElementById('totalFanProgress'); if(tp) tp.style.width = Math.min(100, (my.totalFans / my.targetFans) * 100) + '%';
-        const tpt = document.getElementById('totalFanPercentText'); if(tpt) tpt.textContent = Math.floor((my.totalFans / my.targetFans) * 100) + '%';
+        const dr = document.getElementById('displayRemaining'); if(dr) dr.textContent = Math.max(0, my.targetFans - (my.totalFans || 0)).toLocaleString();
+        const tp = document.getElementById('totalFanProgress'); if(tp) tp.style.width = Math.min(100, ((my.totalFans || 0) / my.targetFans) * 100) + '%';
+        const tpt = document.getElementById('totalFanPercentText'); if(tpt) tpt.textContent = Math.floor(((my.totalFans || 0) / my.targetFans) * 100) + '%';
+        
         renderGrowthChart(); renderMembers(); renderTimeline(); renderAIWisdom();
+    }
+
+    // --- Core Functions ---
+    function renderGrowthChart() {
+        const ctx = document.getElementById('growthChart'); if(!ctx || !currentCircle) return;
+        const uid = currentUser?.id || 'guest';
+        const my = currentCircle.members[uid] || { totalFans: 0, history: [] };
+        
+        let history = (my.history && my.history.length > 0) ? my.history : [0, my.totalFans];
+        
+        if(window.myChart) window.myChart.destroy();
+        window.myChart = new Chart(ctx, {
+            type: 'line',
+            data: { labels: history.map((_,i)=>`Day ${i+1}`), datasets: [{ label: 'ファン数推移', data: history, borderColor: '#fba1ba', backgroundColor: 'rgba(251,161,186,0.1)', fill: true, tension: 0.4 }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: false, grid: { color: 'rgba(0,0,0,0.03)' } }, x: { grid: { display: false } } } }
+        });
     }
 
     function renderMembers() {
         const g = document.getElementById('membersGrid'); if(!g) return;
         g.innerHTML = '';
-        Object.keys(currentCircle.members).forEach(uid => {
+        Object.keys(currentCircle.members || {}).forEach(uid => {
             const m = currentCircle.members[uid];
             const d = document.createElement('div'); d.className = 'member-avatar-mini';
-            if(m.icon) d.style.backgroundImage = `url('${m.icon}')`; else d.textContent = m.name.substring(0,1);
+            if(m.icon) d.style.backgroundImage = `url('${m.icon}')`; else d.textContent = (m.name || 'U').substring(0,1);
             g.appendChild(d);
         });
     }
