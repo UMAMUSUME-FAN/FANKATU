@@ -7,9 +7,7 @@ let currentCircle = null;
 
 // --- Helper Functions ---
 function showToast(m, t='success'){ const s=document.getElementById('toast'); if(!s) return; s.textContent=m; s.className=`toast show ${t}`; setTimeout(()=>s.classList.remove('show'),3000); }
-async function updateDataAndUI(){ if(!currentCircle) return; const res=await callBackend({action:'getCircleData', circleId:currentCircle.id}); currentCircle=res.circle; updateDashboard(); }
 
-// --- DOM References ---
 document.addEventListener('DOMContentLoaded', async () => {
     const loginBtn = document.getElementById('discordLoginBtn');
     if (loginBtn) {
@@ -32,7 +30,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         try {
             const userRes = await fetch('https://discord.com/api/users/@me', { headers: { Authorization: `Bearer ${token}` } });
             const du = await userRes.json();
-            currentUser = { id: du.id, name: du.username, avatar: `https://cdn.discordart.com/avatars/${du.id}/${du.avatar}.png` };
+            currentUser = { id: du.id, name: du.username, avatar: `https://cdn.discordapp.com/avatars/${du.id}/${du.avatar}.png` };
             if(authOverlay) authOverlay.classList.add('hidden');
             showPortal();
         } catch(e) { console.error("Auth Fail", e); }
@@ -79,10 +77,18 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     }
 
+    async function updateDataAndUI() {
+        const db = await callBackend({ action: 'getAllCircles' });
+        const cid = currentCircle ? currentCircle.id : 'circle-1';
+        const res = await callBackend({ action: 'getCircleData', circleId: cid });
+        if(res.success) { currentCircle = res.circle; updateDashboard(); }
+    }
+
     function updateDashboard() {
         if(!currentCircle) return;
-        const cName = document.getElementById('circleNameDisplay'); if(cName) cName.textContent = currentCircle.name;
-        const my = currentCircle.members[currentUser.id] || { totalFans: 0, targetFans: 3000000, history: [] };
+        const c = currentCircle;
+        const cName = document.getElementById('circleNameDisplay'); if(cName) cName.textContent = c.name;
+        const my = c.members[currentUser.id] || { totalFans: 0, targetFans: 3000000, history: [] };
         const dt = document.getElementById('displayTotalTarget'); if(dt) dt.textContent = my.targetFans.toLocaleString();
         const dr = document.getElementById('displayRemaining'); if(dr) dr.textContent = Math.max(0, my.targetFans - my.totalFans).toLocaleString();
         const tp = document.getElementById('totalFanProgress'); if(tp) tp.style.width = Math.min(100, (my.totalFans / my.targetFans) * 100) + '%';
@@ -105,22 +111,27 @@ document.addEventListener('DOMContentLoaded', async () => {
     function renderTimeline() {
         const list = document.getElementById('timelineList'); if(!list) return;
         list.innerHTML = '';
-        let posts = currentCircle.timeline || [];
+        const c = currentCircle || { timeline: [] };
+        let posts = c.timeline || [];
         if (currentTagFilter) {
-            posts = posts.filter(p => p.text.includes(currentTagFilter));
+            posts = posts.filter(p => (p.text || "").includes(currentTagFilter));
             const clearBtn = document.createElement('div');
-            clearBtn.innerHTML = `<button class="glass-btn" style="width:100%; font-size:12px; margin-bottom:10px;">絞り込み中: ${currentTagFilter} (解除)</button>`;
+            clearBtn.innerHTML = `<button class="glass-btn primary" style="width:100%; font-size:12px; margin-bottom:10px;">絞り込み解除: ${currentTagFilter}</button>`;
             clearBtn.onclick = () => { currentTagFilter = null; renderTimeline(); };
             list.appendChild(clearBtn);
         }
+        if(posts.length === 0) { list.innerHTML = '<div style="text-align:center; padding:30px; opacity:0.4; font-size:12px;">パドックにはまだ投稿がありません。</div>'; return; }
+        
         posts.slice().reverse().forEach(p => {
             const div = document.createElement('div'); div.className = 'timeline-item';
-            const linkedText = p.text.replace(/#(\S+)/g, '<span class="hashtag">#$1</span>');
-            let imagesHtml = (p.images || []).map(img => `<img src="${img}" style="width:calc(50% - 5px); border-radius:10px; border:1px solid #eee; object-fit:cover; aspect-ratio:16/9;">`).join('');
+            div.style = "animation: slideIn 0.3s ease-out; margin-bottom:15px;";
+            const text = p.text || "";
+            const linkedText = text.replace(/#(\S+)/g, '<span class="hashtag">#$1</span>');
+            let imagesHtml = (p.images || []).map(img => `<img src="${img}" style="width:calc(50% - 5px); border-radius:12px; border:1px solid #eee; object-fit:cover; aspect-ratio:16/9; cursor:pointer;" onclick="window.open(this.src)">`).join('');
             let imageGrid = imagesHtml ? `<div style="display:flex; flex-wrap:wrap; gap:10px; margin-top:10px;">${imagesHtml}</div>` : '';
-            div.innerHTML = `<div class="timeline-header"><span class="timeline-user">${p.userName}</span><span class="timeline-time">${p.time}</span></div><div class="timeline-content">${linkedText}</div>${imageGrid}`;
-            if(p.aiComment) div.innerHTML += `<div style="margin-top:10px; padding:10px; background:rgba(251,161,186,0.05); border-radius:10px; font-size:12px; border-left:3px solid var(--primary);"><b>✨ AI Secretary:</b> ${p.aiComment}</div>`;
-            div.querySelectorAll('.hashtag').forEach(tagEl => { tagEl.onclick = (e) => { e.stopPropagation(); currentTagFilter = tagEl.textContent; renderTimeline(); }; });
+            div.innerHTML = `<div class="timeline-header"><span class="timeline-user">${p.userName || 'Trainer'}</span><span class="timeline-time">${p.time || ''}</span></div><div class="timeline-content">${linkedText}</div>${imageGrid}`;
+            if(p.aiComment) div.innerHTML += `<div style="margin-top:10px; padding:12px; background:rgba(251,161,186,0.06); border-radius:12px; font-size:11px; border-left:4px solid var(--primary); line-height:1.5;"><b>✨ AI解析・文字起こし:</b><br>${p.aiComment.replace(/\n/g, '<br>')}</div>`;
+            div.querySelectorAll('.hashtag').forEach(t => t.onclick = (e) => { e.stopPropagation(); currentTagFilter = t.textContent; renderTimeline(); });
             list.appendChild(div);
         });
     }
@@ -130,7 +141,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const db = await callBackend({ action: 'getAllCircles' });
         const wisdom = db.globalWisdom || [];
         let allTags = [];
-        Object.values(db.circles).forEach(c => { (c.timeline || []).forEach(p => { const tags = p.text.match(/#(\S+)/g); if(tags) allTags.push(...tags); }); });
+        Object.values(db.circles).forEach(c => { (c.timeline || []).forEach(p => { const tags = (p.text || "").match(/#(\S+)/g); if(tags) allTags.push(...tags); }); });
         const tagCounts = allTags.reduce((acc, t) => (acc[t] = (acc[t] || 0) + 1, acc), {});
         const sortedTags = Object.entries(tagCounts).sort((a,b) => b[1] - a[1]).slice(0, 10);
         let tagsHtml = `<div style="margin-bottom:20px; display:flex; flex-wrap:wrap; gap:8px;">`;
@@ -144,7 +155,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     async function compressImage(base64, maxWidth = 1000) {
         return new Promise((resolve) => {
             const img = new Image();
-            img.onerror = () => resolve(base64); // エラー時は圧縮せずそのまま返す
+            img.onerror = () => resolve(base64);
             img.onload = () => {
                 try {
                     const canvas = document.createElement('canvas');
@@ -201,8 +212,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             const db = await callBackend({ action: 'getAllCircles' });
             let aiComment = null;
             if (db.masterConfig?.aiKey && currentImages.length > 0) {
-                showToast("AIが画像からデータを抽出・分析中...");
-                const ocrPrompt = "画像を見て、ウマ娘の名前、ファン数、スピード等のステータス、因子、脚質を可能な限り抽出し、読みやすく箇条書きで文字起こししてください。また、データ化しやすいように末尾に【DATA】: {JSON形式の数値データ} を付与してください。";
+                showToast("AIが画像からデータを抽出中...");
+                const ocrPrompt = "画像を見て、ウマ娘の名前、ファン数、スピード等のステータス、因子、脚質を可能な限り抽出し、読みやすく箇条書きで文字起こししてください。";
                 aiComment = await callGemini(db.masterConfig.aiKey, ocrPrompt, currentImages);
             }
             
@@ -218,7 +229,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             if(res.success) {
                 timelineInput.value = ''; currentImages = []; updatePreview(); 
                 if(postModal) postModal.classList.add('hidden'); 
-                updateDataAndUI();
+                await updateDataAndUI();
                 showToast("パドックに投稿しました！");
             } else { throw new Error(res.error || "送信失敗"); }
         } catch(e) {
@@ -235,11 +246,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     window.addEventListener('paste', async (e) => {
         const items = e.clipboardData.items;
         const isModalOpen = postModal && !postModal.classList.contains('hidden');
-        
-        // モーダルが開いている時は「絶対」に掲示板優先、閉じてる時はクリック場所で判断
-        const isPaddockTarget = isModalOpen || 
-                                (document.activeElement && document.activeElement.id === 'timelineInput') || 
-                                (lastClickedElement && lastClickedElement.closest('#timelineCard'));
+        const isPaddockTarget = isModalOpen || (document.activeElement && document.activeElement.id === 'timelineInput') || (lastClickedElement && lastClickedElement.closest('#timelineCard'));
 
         for (let item of items) {
             if (item.type.indexOf('image') !== -1) {
@@ -276,7 +283,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const switchBtn = document.getElementById('switchCircleBtn'); if(switchBtn) switchBtn.onclick = showPortal;
     const adminBtn = document.getElementById('adminBtn'); if(adminBtn) adminBtn.onclick = (e) => { e.preventDefault(); const p = prompt('Leader PW:'); if(p === currentCircle.adminPass) { const am = document.getElementById('admin-modal'); if(am) am.classList.remove('hidden'); } };
 
-    // --- Missing Functions ---
+    // --- Core Functions ---
     function renderGrowthChart() {
         const ctx = document.getElementById('growthChart'); if(!ctx || !currentCircle) return;
         const my = currentCircle.members[currentUser.id] || { history: [] };
@@ -323,7 +330,6 @@ async function callBackend(p) {
 
     if (p.action === 'init' || p.action === 'getAllCircles') return db;
     
-    // サークルIDの特定 (フォールバック付)
     let cid = p.circleId || (currentCircle ? currentCircle.id : 'circle-1');
     if (!db.circles[cid]) cid = 'circle-1';
     let targetCircle = db.circles[cid];

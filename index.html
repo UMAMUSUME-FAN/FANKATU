@@ -110,46 +110,42 @@
                 <div class="chart-container"><canvas id="growthChart"></canvas></div>
             </div>
 
-            <!-- Community Timeline (Uma Style) -->
-            <div class="side-card glass-panel" id="timelineCard" style="grid-column: 1/2; grid-row: 2/4; display:flex; flex-direction:column;">
-                <div class="card-header">
-                    <div>
-                        <h3 style="display:inline-block; margin-right:10px;">Trainers' Paddock</h3>
-                        <span class="tag">Live</span>
+            <!-- Community Timeline (SNS Style) -->
+            <div class="side-card glass-panel" id="timelineCard" style="grid-column: 1 / -1; min-height: 400px; display:flex; flex-direction:column;">
+                <div class="card-header" style="background: rgba(26,115,232,0.03); border-bottom: 1px solid rgba(0,0,0,0.05); padding: 20px 30px;">
+                    <div style="display:flex; align-items:center; gap:15px;">
+                        <h2 style="font-size:24px; margin:0;"><span class="material-icons-outlined" style="vertical-align:middle; margin-right:8px; color:var(--primary);">groups</span> Trainers' Paddock</h2>
+                        <span class="tag" style="background:var(--primary); color:white;">LIVE</span>
                     </div>
-                    <button id="openPostModalBtn" class="glass-btn primary" style="padding: 8px 15px; font-size:12px;">
-                        <span class="material-icons-outlined" style="font-size:18px; margin-right:5px;">edit_note</span> 投稿する
+                    <button id="openPostModalBtn" class="glass-btn primary" style="padding: 12px 25px; font-size:14px; box-shadow: 0 5px 15px rgba(26,115,232,0.3);">
+                        <span class="material-icons-outlined" style="font-size:20px; margin-right:8px;">add_photo_alternate</span> 投稿する
                     </button>
                 </div>
                 
-                <div id="timelineList" class="scroll-list" style="flex:1; display:flex; flex-direction:column; gap:15px; margin-top:10px;">
-                    <!-- Timeline posts here -->
+                <div id="timelineList" class="scroll-list" style="flex:1; padding:30px; display:flex; flex-direction:column; gap:20px;">
+                    <!-- Timeline items will be rendered here -->
+                    <div style="text-align:center; padding:50px; opacity:0.3;">
+                        <span class="material-icons-outlined" style="font-size:48px;">hourglass_empty</span>
+                        <p>パドックを準備中...</p>
+                    </div>
                 </div>
+            </div>
+
+            <!-- Uma-Wiki (AI Wisdom) -->
+            <div class="side-card glass-panel" id="wisdomCard" style="background:linear-gradient(135deg, rgba(224, 195, 132, 0.05), rgba(255, 255, 255, 1)); border-top:4px solid var(--secondary);">
+                <div class="card-header">
+                    <h3 style="display:flex; align-items:center; gap:8px;"><span class="material-icons-outlined" style="color:var(--secondary);">auto_stories</span> Uma-Wiki</h3>
+                </div>
+                <div id="aiWisdomContent" style="padding:20px;"></div>
             </div>
 
             <!-- Members -->
             <div class="side-card glass-panel" id="membersCard">
-                <div class="card-header"><h3>Members</h3><p>メンバー一覧</p></div>
-                <div class="members-grid-mini" id="membersGrid"></div>
+                <div class="card-header"><h3>Members</h3></div>
+                <div class="members-grid-mini" id="membersGrid" style="padding:20px;"></div>
             </div>
-
-            <!-- Uma-Wiki (AI Auto-Accumulation) -->
-            <div class="side-card glass-panel" id="wisdomCard" style="background:linear-gradient(135deg, rgba(224, 195, 132, 0.05), rgba(255, 255, 255, 1)); border-left:4px solid var(--secondary);">
-                <div class="card-header">
-                    <h3 style="display:flex; align-items:center; gap:8px;"><span class="material-icons-outlined" style="color:var(--secondary);">auto_stories</span> Uma-Wiki</h3>
-                    <p>AIが分析したサークル独自の攻略ノート（閲覧専用）</p>
-                </div>
-                <div id="aiWisdomContent" style="font-size:13px; line-height:1.6; color:var(--text-dark);">
-                    <!-- AI summarized content here -->
-                    ここには、上の『パドック』で投稿された攻略情報が、AIの手によって自動的に抽出・整理されて表示されます。
-                </div>
-            </div>
-
-            <!-- Data Upload -->
-            <div class="side-card glass-panel" id="dropzone">
-                <div class="card-header"><h3>Upload</h3><p>Paste image (Ctrl+V)</p></div>
-                <div id="uploadInner" class="upload-placeholder"><span class="material-icons-outlined">cloud_upload</span><p>Waiting...</p></div>
-            </div>
+        </div>
+    </div>
         </div>
     </div>
 

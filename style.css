@@ -188,7 +188,55 @@ body {
     100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
 }
 
-/* Hashtag Styles */
+/* --- Timeline & SNS Style --- */
+.timeline-item {
+    background: #fff;
+    border: 1px solid rgba(0,0,0,0.06);
+    border-radius: 18px;
+    padding: 25px;
+    margin-bottom: 20px;
+    transition: 0.3s;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.02);
+    animation: slideIn 0.4s ease-out;
+}
+
+.timeline-item:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 10px 25px rgba(0,0,0,0.06);
+    border-color: var(--primary);
+}
+
+.timeline-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.timeline-user {
+    font-size: 16px;
+    font-weight: 800;
+    color: var(--text-dark);
+}
+
+.timeline-time {
+    font-size: 11px;
+    color: var(--text-muted);
+}
+
+.timeline-content {
+    font-size: 15px;
+    line-height: 1.7;
+    color: var(--text-dark);
+    margin-bottom: 15px;
+}
+
+@keyframes slideIn {
+    from { opacity: 0; transform: translateY(15px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* --- Hashtag & Drag Support --- */
 .hashtag {
     color: #1a73e8;
     font-weight: 600;
@@ -202,10 +250,23 @@ body {
     border-radius: 4px;
 }
 
-/* Drag & Drop Feedback */
 .side-card.drag-over {
     background: rgba(26, 115, 232, 0.05);
-    border: 2px dashed var(--discord-blue) !important;
+    border: 2px dashed var(--primary) !important;
     transform: scale(1.02);
 }
-.side-card.drag-over * { pointer-events: none; }
+
+/* Layout Adjustment for Timeline-centric approach */
+.main-dashboard-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 30px;
+}
+
+#timelineCard { grid-column: 1 / -1; }
+.hero-card { grid-column: 1 / 2; }
+#statsCard { grid-column: 2 / 3; }
+
+@media (max-width: 1000px) {
+    .main-dashboard-grid { display: flex; flex-direction: column; }
+}
