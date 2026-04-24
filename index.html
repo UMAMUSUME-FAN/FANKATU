@@ -87,8 +87,11 @@
                 <span class="material-icons-outlined nav-symbol" data-target="statsCard" title="Stats">bar_chart</span>
                 <span class="material-icons-outlined nav-symbol" data-target="membersCard" title="Members">group</span>
                 <span class="material-icons-outlined nav-symbol" data-target="dropzone" title="Upload">cloud_upload</span>
-                <div style="border-top:1px solid #eee; margin:10px 0; width:30px;"></div>
-                <span class="material-icons-outlined" id="switchCircleBtn" title="サークルを切り替える" style="cursor:pointer; color:var(--text-muted);">swap_horiz</span>
+                <div style="border-top:1px solid #ddd; margin:10px 0; width:30px;"></div>
+                <div id="switchCircleBtn" title="サークルを切り替える (Portal)" style="cursor:pointer; display:flex; flex-direction:column; align-items:center; gap:2px; transition:0.3s;">
+                    <span class="material-icons-outlined" style="color:var(--primary); font-size:28px;">swap_horizontal_circle</span>
+                    <span style="font-size:8px; font-weight:bold; color:var(--text-muted); text-align:center; line-height:1;">CHANGE</span>
+                </div>
             </div>
 
             <!-- Center Panel (Hero) -->
@@ -161,60 +164,67 @@
                 <div id="uploadInner" style="text-align:center; padding: 20px; color:#9d8e90;">
                     <span class="material-icons-outlined" style="font-size:40px;">cloud_upload</span>
                     <p style="margin-top:10px; font-weight:bold;">Waiting for Paste...</p>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <!-- Admin Settings Modal -->
-    <div id="admin-modal" class="modal-overlay hidden">
-        <div class="modal-content glass-panel" style="width: 500px; max-width: 90%;">
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px;">
-                <h2 style="font-family:'Playfair Display', serif;">Administrator Settings</h2>
-                <span class="material-icons-outlined close-modal" id="closeAdmin" style="cursor:pointer;">close</span>
+                      <span class="material-icons-outlined close-modal" id="closeAdmin" style="cursor:pointer;">close</span>
             </div>
             
-            <div style="margin-bottom: 20px;">
-                <label style="font-size:14px; font-weight:bold; color:var(--text-muted);">今月の目標総ファン数 (サークル全体)</label>
-                <input type="number" id="adminTotalTarget" class="glass-input" style="margin-top:5px;" value="100000000">
-            </div>
+            <div style="max-height: 70vh; overflow-y: auto; padding-right: 10px;">
+                <div style="margin-bottom: 20px; background: rgba(251, 161, 186, 0.05); padding: 20px; border-radius: 20px; border: 1px solid rgba(251, 161, 186, 0.2);">
+                    <label style="font-size:14px; font-weight:bold; color:var(--primary); display:flex; align-items:center; gap:5px;">
+                        <span class="material-icons-outlined" style="font-size:18px;">edit</span> サークル名の変更
+                    </label>
+                    <input type="text" id="adminCircleNameInput" class="glass-input" style="margin-top:8px; border-color:var(--primary);" placeholder="サークル名を入力">
+                </div>
 
-            <div style="margin-bottom: 20px;">
-                <label style="font-size:14px; font-weight:bold; color:var(--text-muted);">所属申請の管理 (承認待ち)</label>
-                <div id="adminJoinRequests" style="max-height: 120px; overflow-y: auto; background: rgba(251, 161, 186, 0.05); padding: 15px; border-radius: 10px; margin-top:5px; border: 1px dashed var(--primary);">
-                    <!-- JS injects requests here -->
+                <div style="margin-bottom: 20px;">
+                    <label style="font-size:14px; font-weight:bold; color:var(--text-muted);">今月の目標総ファン数 (サークル全体)</label>
+                    <input type="number" id="adminTotalTarget" class="glass-input" style="margin-top:5px;" value="100000000">
+                </div>
+
+                <div style="margin-bottom: 20px;">
+                    <label style="font-size:14px; font-weight:bold; color:var(--text-muted);">所属申請の管理 (承認待ち)</label>
+                    <div id="adminJoinRequests" style="max-height: 120px; overflow-y: auto; background: rgba(251, 161, 186, 0.05); padding: 15px; border-radius: 10px; margin-top:5px; border: 1px dashed var(--primary);">
+                        <!-- JS injects requests here -->
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 20px;">
+                    <label style="font-size:14px; font-weight:bold; color:var(--text-muted);">個別の目標ファン数設定</label>
+                    <div id="adminMemberList" style="max-height: 180px; overflow-y: auto; background: rgba(0,0,0,0.03); padding: 15px; border-radius: 10px; margin-top:5px;">
+                        <!-- JS injects checkboxes -->
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 20px;">
+                    <label style="font-size:12px; color:var(--text-muted);">※上記でチェックを入れたメンバーの目標値を一括設定</label>
+                    <div style="display:flex; gap:10px; margin-top:5px;">
+                        <input type="number" id="adminIndividualTarget" class="glass-input" value="3000000">
+                        <button class="glass-btn primary" id="applyIndividualTargetBtn" style="white-space:nowrap;">適用する</button>
+                    </div>
+                </div>
+
+                <div style="margin-bottom: 20px; border-top: 1px solid rgba(0,0,0,0.1); padding-top: 20px;">
+                    <label style="font-size:14px; font-weight:bold; color:#7289da; display:flex; align-items:center; gap:5px;">
+                        Discord連携 (Webhook URL)
+                    </label>
+                    <input type="text" id="adminDiscordWebhook" class="glass-input" style="margin-top:5px;" placeholder="https://discord.com/api/webhooks/...">
+                </div>
+
+                <div style="margin-bottom: 20px; border-top: 1px solid rgba(0,0,0,0.1); padding-top: 20px;">
+                    <label style="font-size:14px; font-weight:bold; color:var(--text-muted);">管理者ログイン情報の変更</label>
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-top:8px;">
+                        <div>
+                            <span style="font-size:11px; color:var(--text-muted);">新しいID</span>
+                            <input type="text" id="adminIdInput" class="glass-input" placeholder="管理者ID">
+                        </div>
+                        <div>
+                            <span style="font-size:11px; color:var(--text-muted);">新しいPASS</span>
+                            <input type="text" id="adminPassInput" class="glass-input" placeholder="パスワード">
+                        </div>
+                    </div>
                 </div>
             </div>
-
-            <div style="margin-bottom: 20px;">
-                <label style="font-size:14px; font-weight:bold; color:var(--text-muted);">個別の目標ファン数設定</label>
-                <div id="adminMemberList" style="max-height: 180px; overflow-y: auto; background: rgba(0,0,0,0.03); padding: 15px; border-radius: 10px; margin-top:5px;">
-                    <!-- JS injects checkboxes -->
-                </div>
-            </div>
-
-            <div style="margin-bottom: 20px;">
-                <label style="font-size:12px; color:var(--text-muted);">※上記でチェックを入れたメンバーの目標値を一括設定</label>
-                <div style="display:flex; gap:10px; margin-top:5px;">
-                    <input type="number" id="adminIndividualTarget" class="glass-input" value="3000000">
-                    <button class="glass-btn primary" id="applyIndividualTargetBtn" style="white-space:nowrap;">適用する</button>
-                </div>
-            </div>
-
-            <div style="margin-bottom: 20px; border-top: 1px solid rgba(0,0,0,0.1); padding-top: 20px;">
-                <label style="font-size:14px; font-weight:bold; color:#7289da; display:flex; align-items:center; gap:5px;">
-                    Discord連携 (Webhook URL)
-                </label>
-                <input type="text" id="adminDiscordWebhook" class="glass-input" style="margin-top:5px;" placeholder="https://discord.com/api/webhooks/...">
-                <p style="font-size:11px; margin-top:3px; color:var(--text-muted);">※Discordのチャンネル設定 > 連携サービス > ウェブフックからURLを作成して貼り付けてください。</p>
-            </div>
-
-            <div style="margin-bottom: 20px; border-top: 1px solid rgba(0,0,0,0.1); padding-top: 20px;">
-                <label style="font-size:14px; font-weight:bold; color:var(--text-muted);">サークル名の変更</label>
-                <input type="text" id="adminCircleNameInput" class="glass-input" style="margin-top:5px;" placeholder="サークル名を入力">
-            </div>
-
-            <div style="margin-bottom: 20px;">
+            
+            <button class="glass-btn primary" id="saveAdminBtn" style="width:100%; margin-top:20px; padding:15px; font-size:18px;">全体設定を保存する</button>">
                 <label style="font-size:14px; font-weight:bold; color:var(--text-muted);">管理者IDの変更</label>
                 <input type="text" id="adminIdInput" class="glass-input" style="margin-top:5px;" placeholder="新しい管理者ID">
             </div>

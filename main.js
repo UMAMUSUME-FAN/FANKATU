@@ -409,11 +409,24 @@ document.addEventListener('DOMContentLoaded', () => {
         list.innerHTML = '';
         
         res.ranking.forEach((c, idx) => {
+            const isMyCircle = currentCircle && c.id === currentCircle.id;
             const row = document.createElement('div');
             row.style.display = 'flex'; row.style.justifyContent = 'space-between'; row.style.padding = '10px 12px';
-            row.style.background = (currentCircle && c.id === currentCircle.id) ? 'rgba(251, 161, 186, 0.15)' : 'rgba(255,255,255,0.5)';
+            row.style.background = isMyCircle ? 'rgba(251, 161, 186, 0.15)' : 'rgba(255,255,255,0.5)';
             row.style.borderRadius = '12px';
-            row.style.border = (currentCircle && c.id === currentCircle.id) ? '1px solid var(--primary)' : '1px solid #eee';
+            row.style.border = isMyCircle ? '1px solid var(--primary)' : '1px solid #eee';
+            row.style.cursor = 'pointer';
+            row.style.transition = '0.2s';
+            row.onmouseover = () => row.style.transform = 'translateX(5px)';
+            row.onmouseout = () => row.style.transform = 'translateX(0)';
+            
+            row.onclick = () => {
+                if (isMyCircle) return;
+                if (confirm(`${c.name} に参加申請を送りますか？（または所属済みなら切り替えます）`)) {
+                    selectCircle(c.id);
+                }
+            };
+
             row.innerHTML = `
                 <div style="display:flex; align-items:center; gap:12px;">
                     <span style="font-weight:bold; color:var(--text-dark); width:20px; text-align:center;">${idx + 1}</span>
