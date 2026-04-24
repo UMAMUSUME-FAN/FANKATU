@@ -43,7 +43,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('portalUserName').textContent = currentUser.name;
         const ava = document.getElementById('portalUserAvatar');
         if (currentUser.avatar) { ava.style.backgroundImage = `url('${currentUser.avatar}')`; ava.textContent = ''; }
-        
         renderPortalCircles();
     }
 
@@ -55,7 +54,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         myList.innerHTML = '';
         resultsList.innerHTML = '';
         
-        // My Circles (where joined = true)
         const userToCircles = db.userToCircles[currentUser.id] || [];
         userToCircles.forEach(cid => {
             const c = db.circles[cid];
@@ -69,7 +67,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             myList.appendChild(item);
         });
 
-        // Other Circles (Search results)
         Object.keys(db.circles).forEach(cid => {
             if (userToCircles.includes(cid)) return;
             const c = db.circles[cid];
@@ -92,240 +89,142 @@ document.addEventListener('DOMContentLoaded', async () => {
             appWrapper.style.display = 'flex';
             appWrapper.style.flexDirection = 'column';
             appWrapper.style.alignItems = 'center';
-
             document.getElementById('userNameDisplay').textContent = currentUser.name;
             const ua = document.getElementById('userAvatar');
             if (currentUser.avatar) { ua.style.backgroundImage = `url('${currentUser.avatar}')`; ua.textContent = ''; }
-
             updateDashboard();
         }
     }
 
     async function requestJoinCircle(cid) {
         await callBackend({ action: 'requestJoin', circleId: cid, userId: currentUser.id });
-        alert('参加申請を送りました！管理者の承認を待ってください。');
+        alert('申請完了！');
         renderPortalCircles();
     }
 
     // --- Dashboard Core ---
     function updateDashboard() {
         document.getElementById('circleNameDisplay').textContent = currentCircle.name;
-        
-        // My Stats
         const myData = currentCircle.members[currentUser.id] || { totalFans: 0, targetFans: 3000000, history: [] };
         document.getElementById('displayTotalTarget').textContent = myData.targetFans.toLocaleString();
-        
-        const rem = Math.max(0, myData.targetFans - myData.totalFans);
-        document.getElementById('displayRemaining').textContent = rem.toLocaleString();
-        
+        document.getElementById('displayRemaining').textContent = Math.max(0, myData.targetFans - myData.totalFans).toLocaleString();
         const progress = Math.min(100, (myData.totalFans / myData.targetFans) * 100);
         document.getElementById('totalFanProgress').style.width = progress + '%';
         document.getElementById('totalFanPercentText').textContent = Math.floor(progress) + '%';
-
-        // Discord Link
+        
         const dlink = document.getElementById('circleDiscordLink');
-        if (currentCircle.discordInvite) {
-            dlink.href = currentCircle.discordInvite;
-            dlink.style.display = 'flex';
-        } else {
-            dlink.style.display = 'none';
-        }
+        if (currentCircle.discordInvite) { dlink.href = currentCircle.discordInvite; dlink.style.display = 'flex'; }
+        else { dlink.style.display = 'none'; }
 
         renderGrowthChart();
         renderMembers();
         renderRanking();
     }
 
-    async function renderMembers() {
-        const grid = document.getElementById('membersGrid');
-        grid.innerHTML = '';
+    function renderMembers() {
+        const grid = document.getElementById('membersGrid'); grid.innerHTML = '';
         Object.keys(currentCircle.members).forEach(uid => {
             const m = currentCircle.members[uid];
             const div = document.createElement('div');
             div.className = 'member-avatar-mini';
-            div.title = m.name;
             if (m.icon) div.style.backgroundImage = `url('${m.icon}')`;
-            else div.textContent = m.name.substring(0, 1);
+            else div.textContent = m.name.substring(0,1);
             div.onclick = () => showMemberDetails(uid);
             grid.appendChild(div);
         });
     }
 
     async function renderRanking() {
-        const list = document.getElementById('circleRankingList');
-        list.innerHTML = '';
+        const list = document.getElementById('circleRankingList'); list.innerHTML = '';
         const db = await callBackend({ action: 'getAllCircles' });
         const sorted = Object.values(db.circles).sort((a,b) => b.totalFans - a.totalFans).slice(0, 5);
-        
         sorted.forEach((c, idx) => {
             const item = document.createElement('div');
             item.style = 'display:flex; justify-content:space-between; align-items:center; padding:10px; background:rgba(0,0,0,0.02); border-radius:12px;';
-            item.innerHTML = `
-                <div style="display:flex; align-items:center; gap:10px;">
-                    <span style="font-weight:bold; color:var(--primary);">${idx+1}</span>
-                    <span style="font-weight:600; font-size:14px;">${c.name}</span>
-                </div>
-                <span class="tag">${(c.totalFans/10000).toFixed(1)}万</span>
-            `;
+            item.innerHTML = `<div style="display:flex; gap:10px;"><span style="color:var(--primary); font-weight:bold;">${idx+1}</span><span style="font-weight:600; font-size:14px;">${c.name}</span></div><span class="tag">${(c.totalFans/10000).toFixed(1)}万</span>`;
             list.appendChild(item);
         });
     }
 
-    // --- Master Stats Logic ---
+    // --- Master Stats ---
     function openMasterStats() {
         masterStatsOverlay.classList.remove('hidden');
-        renderMasterStats();
-    }
-
-    function renderMasterStats() {
-        const tbody = document.getElementById('circleLeaderboardBody');
-        tbody.innerHTML = '';
-        
+        const tbody = document.getElementById('circleLeaderboardBody'); tbody.innerHTML = '';
         const sorted = Object.values(currentCircle.members).sort((a,b) => b.totalFans - a.totalFans);
-        let circleTotal = 0;
-        let circleTarget = 0;
-
+        let circleTotal = 0, circleTarget = 0;
         sorted.forEach((m, idx) => {
-            circleTotal += m.totalFans;
-            circleTarget += m.targetFans;
-            const progress = (m.totalFans / m.targetFans * 100).toFixed(1);
-            
+            circleTotal += m.totalFans; circleTarget += m.targetFans;
             const tr = document.createElement('tr');
-            tr.innerHTML = `
-                <td style="padding:12px; font-weight:bold;">${idx+1}</td>
-                <td style="padding:12px;">${m.name}</td>
-                <td style="padding:12px;">${m.totalFans.toLocaleString()}</td>
-                <td style="padding:12px;"><span class="tag">${progress}%</span></td>
-            `;
+            tr.innerHTML = `<td style="padding:10px; font-weight:bold;">${idx+1}</td><td style="padding:10px;">${m.name}</td><td style="padding:10px;">${m.totalFans.toLocaleString()}</td><td style="padding:10px;"><span class="tag">${(m.totalFans/m.targetFans*100).toFixed(1)}%</span></td>`;
             tbody.appendChild(tr);
         });
-
-        // Overview
         document.getElementById('masterTotalFanDisplay').textContent = `${(circleTotal/10000).toFixed(1)}万 / ${(circleTarget/10000).toFixed(1)}万`;
         document.getElementById('masterTotalBar').style.width = Math.min(100, (circleTotal/circleTarget*100)) + '%';
-
-        // Weekly (Top 3 gainers - mock)
-        const weekly = document.getElementById('weeklyContributionList');
-        weekly.innerHTML = '';
-        sorted.slice(0, 3).forEach(m => {
-            const div = document.createElement('div');
-            div.innerHTML = `<span style="font-size:14px; font-weight:bold; color:var(--text-dark);">${m.name}</span> <span style="font-size:12px; float:right;">+${Math.floor(m.totalFans * 0.1).toLocaleString()} fans / week (est)</span>`;
-            weekly.appendChild(div);
-        });
     }
-
-    // --- Event Listeners ---
-    document.getElementById('statsBtn').onclick = (e) => { e.preventDefault(); openMasterStats(); };
-    document.getElementById('closeStatsBtn').onclick = () => masterStatsOverlay.classList.add('hidden');
-    document.getElementById('switchCircleBtn').onclick = showPortal;
-    document.getElementById('logoutBtn').onclick = () => window.location.href = window.location.pathname;
-    document.getElementById('logoutBtnFromPortal').onclick = () => window.location.href = window.location.pathname;
-
-    // Admin
-    document.getElementById('adminBtn').onclick = (e) => {
-        e.preventDefault();
-        const pwd = prompt('管理者パスワードを入力してください:');
-        if (pwd === currentCircle.adminPass) {
-            document.getElementById('admin-modal').classList.remove('hidden');
-            document.getElementById('adminCircleNameInput').value = currentCircle.name;
-        } else {
-            alert('パスワードが違います');
-        }
-    };
 
     // --- Chart Logic ---
     let growthChart = null;
     function renderGrowthChart() {
         const ctx = document.getElementById('growthChart').getContext('2d');
         if (growthChart) growthChart.destroy();
-        
-        const labels = ['1週', '2週', '3週', '4週', '今日'];
-        const myData = currentCircle.members[currentUser.id].history || [0, 10, 20, 30, 45];
-        
+        const myData = currentCircle.members[currentUser.id].history || [0, 100, 200, 300, 450];
         growthChart = new Chart(ctx, {
             type: 'line',
-            data: {
-                labels,
-                datasets: [{
-                    label: 'Fan Growth',
-                    data: myData,
-                    borderColor: '#fba1ba',
-                    backgroundColor: 'rgba(251,161,186,0.1)',
-                    fill: true,
-                    tension: 0.4,
-                    pointRadius: 5
-                }]
-            },
+            data: { labels: ['1週', '2週', '3週', '4週', '今日'], datasets: [{ label: 'Fans', data: myData, borderColor: '#fba1ba', fill: true, backgroundColor: 'rgba(251,161,186,0.1)', tension: 0.4 }] },
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
         });
     }
 
-    // Capture Paste (Image Upload)
+    // --- Event Listeners ---
+    document.getElementById('discordLoginBtn').onclick = () => {
+        const redirect = window.location.origin + window.location.pathname;
+        const authUrl = `https://discord.com/api/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirect)}&response_type=token&scope=identify`;
+        window.location.href = authUrl;
+    };
+    document.getElementById('statsBtn').onclick = (e) => { e.preventDefault(); openMasterStats(); };
+    document.getElementById('closeStatsBtn').onclick = () => masterStatsOverlay.classList.add('hidden');
+    document.getElementById('switchCircleBtn').onclick = showPortal;
+    document.getElementById('logoutBtn').onclick = () => window.location.href = window.location.pathname;
+    document.getElementById('logoutBtnFromPortal').onclick = () => window.location.href = window.location.pathname;
+    document.getElementById('closeAdmin').onclick = () => document.getElementById('admin-modal').classList.add('hidden');
+    document.getElementById('adminBtn').onclick = (e) => {
+        e.preventDefault();
+        const p = prompt('Admin Pass:');
+        if(p === currentCircle.adminPass) { document.getElementById('admin-modal').classList.remove('hidden'); document.getElementById('adminCircleNameInput').value = currentCircle.name; }
+    };
+
     window.addEventListener('paste', async (e) => {
         const items = e.clipboardData.items;
         for (let item of items) {
             if (item.type.indexOf('image') !== -1) {
-                const blob = item.getAsFile();
-                alert('画像を検知しました。OCR解析（モック）を実行してファン数を更新します...');
-                
-                // OCR Mock: Random increase
                 const increase = Math.floor(Math.random() * 500000) + 100000;
                 await callBackend({ action: 'updateFans', circleId: currentCircle.id, userId: currentUser.id, fans: (currentCircle.members[currentUser.id].totalFans + increase) });
-                
                 const res = await callBackend({ action: 'getCircleData', circleId: currentCircle.id });
-                currentCircle = res.circle;
-                updateDashboard();
+                currentCircle = res.circle; updateDashboard();
             }
         }
     });
-
-    // Close Modals
-    document.getElementById('closeAdmin').onclick = () => document.getElementById('admin-modal').classList.add('hidden');
-
 });
 
-// --- Mock Backend Logic ---
-async function callBackend(params) {
+async function callBackend(p) {
     let db = JSON.parse(localStorage.getItem(DB_KEY));
     if (!db) {
-        db = {
-            circles: {
-                'circle-1': { id: 'circle-1', name: 'NPC@サークル', adminId: 'admin', adminPass: '1234', totalFans: 1500000, members: { 'npc-1': { name: 'NPC長', totalFans: 500000, targetFans: 3000000, history: [0, 100, 250, 400, 500] } } }
-            },
-            userToCircles: {}
-        };
+        db = { circles: { 'circle-1': { id: 'circle-1', name: 'NPC@サークル', adminId: 'admin', adminPass: '1234', totalFans: 1500000, members: { 'npc-1': { name: 'NPC', totalFans: 500000, targetFans: 3000000, history: [10, 20, 30, 40, 50] } } } }, userToCircles: {} };
         localStorage.setItem(DB_KEY, JSON.stringify(db));
     }
-
-    if (params.action === 'init') return db;
-    if (params.action === 'getAllCircles') return db;
-    if (params.action === 'getCircleData') return { success: true, circle: db.circles[params.circleId] };
-    
-    if (params.action === 'requestJoin') {
-        const c = db.circles[params.circleId];
-        if (!c.joinRequests) c.joinRequests = [];
-        if (!c.joinRequests.includes(params.userId)) c.joinRequests.push(params.userId);
-        localStorage.setItem(DB_KEY, JSON.stringify(db));
-        return { success: true };
+    if (p.action === 'init' || p.action === 'getAllCircles') return db;
+    if (p.action === 'getCircleData') return { success: true, circle: db.circles[p.circleId] };
+    if (p.action === 'requestJoin') {
+        const c = db.circles[p.circleId]; if(!c.joinRequests) c.joinRequests = [];
+        if(!c.joinRequests.includes(p.userId)) c.joinRequests.push(p.userId);
+        localStorage.setItem(DB_KEY, JSON.stringify(db)); return { success: true };
     }
-
-    if (params.action === 'updateFans') {
-        const c = db.circles[params.circleId];
-        const m = c.members[params.userId];
-        if (m) {
-            m.totalFans = params.fans;
-            if (!m.history) m.history = [];
-            m.history.push(params.fans);
-        } else {
-            // Join first time if not exist (mock auto-join for safety)
-            c.members[params.userId] = { name: currentUser.name, totalFans: params.fans, targetFans: 3000000, history: [params.fans], icon: currentUser.avatar };
-        }
-        
-        // Update circle total
-        c.totalFans = Object.values(c.members).reduce((sum, member) => sum + member.totalFans, 0);
-        localStorage.setItem(DB_KEY, JSON.stringify(db));
-        return { success: true };
+    if (p.action === 'updateFans') {
+        const c = db.circles[p.circleId]; let m = c.members[p.userId];
+        if(!m) m = c.members[p.userId] = { name: currentUser.name, totalFans: 0, targetFans: 3000000, history: [], icon: currentUser.avatar };
+        m.totalFans = p.fans; m.history.push(p.fans);
+        c.totalFans = Object.values(c.members).reduce((s, x) => s + x.totalFans, 0);
+        localStorage.setItem(DB_KEY, JSON.stringify(db)); return { success: true };
     }
-
     return db;
 }
