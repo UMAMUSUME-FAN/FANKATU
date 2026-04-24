@@ -134,10 +134,17 @@ document.addEventListener('DOMContentLoaded', async () => {
                     })
                 });
                 const res = await response.json();
+                console.log("AI Response:", res);
+
+                if (!res.candidates || res.candidates.length === 0) {
+                    const reason = res.promptFeedback ? "安全フィルター等により解析が拒否されました" : "AIから回答が得られませんでした";
+                    throw new Error(reason);
+                }
+
                 const aiFans = res.candidates[0].content.parts[0].text.trim().replace(/,/g, '');
                 
                 // 確認ダイアログを出す
-                const confirmedFans = prompt(`AIは「${parseInt(aiFans).toLocaleString()}」ファンだと読み取りました。\n修正が必要な場合は書き換えてOKを押してください。`, aiFans);
+                const confirmedFans = prompt(`AIは「${parseInt(aiFans).toLocaleString() || 0}」ファンだと読み取りました。\n修正が必要な場合は書き換えてOKを押してください。`, aiFans);
                 
                 if (confirmedFans !== null) {
                     const fans = parseInt(confirmedFans.replace(/,/g, ''));
@@ -149,14 +156,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                     }
                 }
             } catch(e) {
-                // AI失敗時は手動入力に切り替え
-                const manual = prompt("AI読み取りに失敗しました。現在のファン数を手動で入力してください：");
-                if(manual) {
-                    const f = parseInt(manual.replace(/,/g, ''));
-                    await callBackend({ action: 'updateFans', circleId: currentCircle.id, fans: f });
-                    await callBackend({ action: 'postTimeline', circleId: currentCircle.id, text: `手動更新：ファン数${f.toLocaleString()}`, images: [smallBase64] });
-                    updateDashboard();
-                }
+                console.error(e);
+                showToast(`解析エラー: ${e.message || "画像の数字が読み取れませんでした"}`, "error");
             }
         };
         reader.readAsDataURL(file);
