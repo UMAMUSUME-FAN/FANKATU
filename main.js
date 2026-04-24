@@ -188,6 +188,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const openBtn = document.getElementById('openPostModalBtn'); if(openBtn) openBtn.onclick = () => { if(postModal) postModal.classList.remove('hidden'); if(timelineInput) timelineInput.focus(); };
     const closeBtn = document.getElementById('closePostModal'); if(closeBtn) closeBtn.onclick = () => { if(postModal) postModal.classList.add('hidden'); };
     
+    const postBtn = document.getElementById('postTimelineBtn');
     if(postBtn) postBtn.onclick = async () => {
         if(!timelineInput.value && currentImages.length === 0) return;
         try {
@@ -228,17 +229,33 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     if(timelineInput) timelineInput.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if(postBtn) postBtn.click(); } };
 
+    // --- Paste & Drag ---
+    let lastClickedElement = null;
+    document.addEventListener('mousedown', (e) => { lastClickedElement = e.target; });
+
     window.addEventListener('paste', async (e) => {
         const items = e.clipboardData.items;
         const isModalOpen = postModal && !postModal.classList.contains('hidden');
+        const isPaddockTarget = document.activeElement && document.activeElement.id === 'timelineInput' || 
+                                (lastClickedElement && (lastClickedElement.closest('#timelineCard') || lastClickedElement.closest('#post-modal')));
+
         for (let item of items) {
             if (item.type.indexOf('image') !== -1) {
                 const blob = item.getAsFile();
                 const reader = new FileReader();
                 reader.onload = async (re) => {
                     const compressed = await compressImage(re.target.result);
-                    if (isModalOpen) { if(currentImages.length < 4){ currentImages.push(compressed); updatePreview(); } }
-                    else { if(postModal) postModal.classList.remove('hidden'); currentImages = [compressed]; updatePreview(); if(timelineInput) timelineInput.focus(); }
+                    if (isModalOpen || isPaddockTarget) {
+                        if(!isModalOpen && postModal) postModal.classList.remove('hidden');
+                        if(currentImages.length < 4){ currentImages.push(compressed); updatePreview(); if(timelineInput) timelineInput.focus(); }
+                    } else {
+                        const inc = Math.floor(Math.random() * 500000) + 100000;
+                        const my = currentCircle.members[currentUser.id] || { totalFans: 0, targetFans: 3000000 };
+                        await callBackend({ action: 'updateFans', circleId: currentCircle.id, fans: my.totalFans + inc });
+                        if (my.totalFans < 3000000 && (my.totalFans + inc) >= 3000000) launchConfetti();
+                        showToast(`+${(inc/10000).toFixed(1)}万ファン獲得！ (OCR解析)`);
+                        updateDataAndUI();
+                    }
                 };
                 reader.readAsDataURL(blob);
             }
