@@ -78,14 +78,15 @@ body {
 /* Dashboard Grid */
 .main-dashboard-grid {
     display: grid;
-    grid-template-columns: 60px minmax(600px, 1.3fr) minmax(300px, 1fr);
-    grid-template-rows: auto auto;
-    gap: 40px;
+    grid-template-columns: 80px 1fr 400px;
+    grid-template-rows: auto auto auto;
+    gap: 30px;
     max-width: 1400px;
     width: 100%;
 }
 
 .tiny-side-nav {
+    grid-row: 1 / 4;
     display: flex;
     flex-direction: column;
     gap: 30px;
@@ -98,6 +99,11 @@ body {
     cursor: pointer;
     transition: 0.3s;
 }
+#heroCard { grid-column: 2 / 3; }
+#statsCard { grid-column: 3 / 4; }
+#membersCard { grid-column: 2 / 3; }
+#rankingCard { grid-column: 3 / 4; }
+#dropzone { grid-column: 2 / 3; }
 .tiny-side-nav span:hover, .tiny-side-nav span.active { color: #c96b83; }
 
 /* Hero Panel */
@@ -184,7 +190,7 @@ body {
     transition: opacity 0.3s;
 }
 .hidden { display: none !important; opacity: 0; pointer-events: none; }
-.modal-overlay.hidden { display: flex !important; opacity: 0; pointer-events: none; } /* keep flex for transitions */
+.modal-overlay.hidden { display: none !important; }
 
 .glass-input { width: 100%; padding: 14px; border-radius: 12px; border: 2px solid #eee; background: rgba(255,255,255,0.9); outline: none; font-size:16px; transition:0.3s; }
 .glass-input:focus { border-color: var(--primary); }
