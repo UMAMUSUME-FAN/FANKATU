@@ -110,7 +110,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         const list = document.getElementById('timelineList'); list.innerHTML = '';
         let posts = currentCircle.timeline || [];
         
-        // Tag Filtering
         if (currentTagFilter) {
             posts = posts.filter(p => p.text.includes(currentTagFilter));
             const clearBtn = document.createElement('div');
@@ -121,36 +120,23 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         posts.slice().reverse().forEach(p => {
             const div = document.createElement('div'); div.className = 'timeline-item';
-            
-            // Linkify Hashtags
             const linkedText = p.text.replace(/#(\S+)/g, '<span class="hashtag" style="color:var(--discord-blue); cursor:pointer; font-weight:bold;">#$1</span>');
-            
             let imgHtml = p.image ? `<img src="${p.image}" style="width:100%; border-radius:10px; margin-top:10px; border:1px solid #eee;">` : '';
             let aiHtml = p.aiComment ? `<div style="margin-top:10px; padding:10px; background:#f0f7ff; border-radius:10px; font-size:12px; border-left:3px solid #5865F2;"><b>✨ AI分析:</b> ${p.aiComment}</div>` : '';
-            
             div.innerHTML = `<div class="timeline-header"><span class="timeline-user">${p.userName}</span><span class="timeline-time">${p.time}</span></div><div class="timeline-content">${linkedText}</div>${imgHtml}${aiHtml}`;
-            
-            // Add click events to hashtags
-            div.querySelectorAll('.hashtag').forEach(tagEl => {
-                tagEl.onclick = (e) => {
-                    e.stopPropagation();
-                    currentTagFilter = tagEl.textContent;
-                    renderTimeline();
-                };
-            });
-
+            div.querySelectorAll('.hashtag').forEach(tagEl => { tagEl.onclick = (e) => { e.stopPropagation(); currentTagFilter = tagEl.textContent; renderTimeline(); }; });
             list.appendChild(div);
         });
     }
 
-    function renderAIWisdom() {
+    async function renderAIWisdom() {
         const area = document.getElementById('aiWisdomContent');
-        if (!currentCircle.wisdom || currentCircle.wisdom.length === 0) {
-            area.innerHTML = "パドックにつぶやいてみましょう。AIが攻略情報を『継承』し、自動でWiki化します。"; return;
-        }
-        const cats = { 'ステータス': 'trending_up', '脚質': 'directions_run', '戦略': 'psychology', 'レース': 'flag' };
-        area.innerHTML = currentCircle.wisdom.map(w => `
-            <div class="wisdom-tip" style="display:flex; gap:10px; align-items:flex-start;">
+        const db = await callBackend({ action: 'getAllCircles' });
+        const wisdom = db.globalWisdom || [];
+        if (wisdom.length === 0) { area.innerHTML = "全国から攻略情報を『継承』し、自動でWiki化中..."; return; }
+        const cats = { 'ステータス': 'trending_up', '脚質': 'directions_run', '戦略': 'psychology', 'レース': 'flag', '育成': 'auto_awesome' };
+        area.innerHTML = wisdom.slice(-12).reverse().map(w => `
+            <div class="wisdom-tip" style="display:flex; gap:10px; border-bottom:1px solid rgba(0,0,0,0.03); padding-bottom:10px;">
                 <span class="material-icons-outlined" style="font-size:16px; color:var(--secondary);">${cats[w.category] || 'shutter_speed'}</span>
                 <div><span class="wisdom-tag">${w.category}</span><span style="font-weight:600; font-size:13px;">${w.text}</span></div>
             </div>
@@ -159,36 +145,33 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     async function showMemberDetails(uid) {
         const m = currentCircle.members[uid]; if (!m) return;
-        alert(`${m.name} さんの状況:\n目標達成率: ${(m.totalFans / m.targetFans * 100).toFixed(1)}%\n「現在のエースとしての風格が出ていますね！」 by AI Secretary`);
+        alert(`${m.name} さんの状況:\n目標達成率: ${(m.totalFans / m.targetFans * 100).toFixed(1)}%\n「現在のエースとしての風格が出ていますね！」`);
     }
 
     async function generateAIAnalysis() {
-        const area = document.getElementById('aiMessageArea'); area.innerHTML = "AIが思考中...";
-        if (currentCircle.aiKey) {
-            const prompt = `サークル「${currentCircle.name}」の分析をして。全体達成率 ${(currentCircle.totalFans/1000000).toFixed(1)}Mファン突破。`;
-            const result = await callGemini(currentCircle.aiKey, prompt);
+        const area = document.getElementById('aiMessageArea');
+        const db = await callBackend({ action: 'getAllCircles' });
+        const aiKey = db.masterConfig?.aiKey;
+        if (aiKey) {
+            const prompt = `あなたは全サークルの管理AIです。「${currentCircle.name}」の分析をして。全体達成率 ${(currentCircle.totalFans/1000000).toFixed(1)}Mファン突破。`;
+            const result = await callGemini(aiKey, prompt);
             area.innerHTML = result;
-        } else { area.innerHTML = "APIキー未設定。順調なペースです！"; }
+        } else {
+            area.innerHTML = `<div style="padding:15px; background:rgba(0,0,0,0.03); border-radius:15px; border:1px dashed #ccc;"><p style="font-weight:bold;">AI Secretary は準備中です</p><p style="font-size:12px; color:var(--text-muted);">システム管理者がAIを有効化するまで、基本機能のみ動作します。</p></div>`;
+        }
     }
 
     async function callGemini(key, prompt, imageBase64 = null) {
         try {
             const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`;
             const parts = [{ text: prompt }];
-            if (imageBase64) {
-                parts.push({ inline_data: { mime_type: "image/jpeg", data: imageBase64.split(',')[1] } });
-            }
-            const res = await fetch(url, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ contents: [{ parts }] })
-            });
-            const data = await res.json();
-            return data.candidates[0].content.parts[0].text;
-        } catch (e) { return "AIが少しお疲れのようです。キーを確認してください。"; }
+            if (imageBase64) parts.push({ inline_data: { mime_type: "image/jpeg", data: imageBase64.split(',')[1] } });
+            const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts }] }) });
+            const data = await res.json(); return data.candidates[0].content.parts[0].text;
+        } catch (e) { return "AIが少しお疲れのようです。"; }
     }
 
-    // --- Timeline Actions ---
+    // --- Actions ---
     const imgInput = document.getElementById('timelineImageInput');
     const previewArea = document.getElementById('timelineImagePreview');
     let currentBase64 = null;
@@ -198,11 +181,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const file = e.target.files[0];
         if (file) {
             const reader = new FileReader();
-            reader.onload = (re) => {
-                currentBase64 = re.target.result;
-                document.getElementById('previewImg').src = currentBase64;
-                previewArea.style.display = 'block';
-            };
+            reader.onload = (re) => { currentBase64 = re.target.result; document.getElementById('previewImg').src = currentBase64; previewArea.style.display = 'block'; };
             reader.readAsDataURL(file);
         }
     };
@@ -211,27 +190,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('postTimelineBtn').onclick = async () => {
         const input = document.getElementById('timelineInput');
         if(!input.value && !currentBase64) return;
-        
-        let aiComment = null;
-        if(currentCircle.aiKey && currentBase64) {
-            showToast("AIが画像を解析中...");
-            aiComment = await callGemini(currentCircle.aiKey, "このウマ娘の育成画面または編成画像を分析して、攻略に役立つアドバイスを100文字以内でして。", currentBase64);
-        }
+        const db = await callBackend({ action: 'getAllCircles' });
+        const aiKey = db.masterConfig?.aiKey;
+        let aiComment = (aiKey && currentBase64) ? await callGemini(aiKey, "このウマ娘の育成画面を分析して、サークルメンバーに役立つアドバイスを100文字以内でして。", currentBase64) : null;
 
-        await callBackend({ 
-            action: 'postTimeline', 
-            circleId: currentCircle.id, 
-            userName: currentUser.name, 
-            text: input.value || (currentBase64 ? "画像をアップロードしました" : ""), 
-            image: currentBase64,
-            aiComment: aiComment
-        });
-
-        input.value = ''; currentBase64 = null; previewArea.style.display = 'none';
-        updateDataAndUI();
+        await callBackend({ action: 'postTimeline', circleId: currentCircle.id, userName: currentUser.name, text: input.value || "画像をアップロード", image: currentBase64, aiComment });
+        input.value = ''; currentBase64 = null; previewArea.style.display = 'none'; updateDataAndUI();
     };
 
-    // --- General Event Listeners ---
     document.getElementById('discordLoginBtn').onclick = () => {
         const r = window.location.origin + window.location.pathname;
         window.location.href = `https://discord.com/api/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&redirect_uri=${encodeURIComponent(r)}&response_type=token&scope=identify`;
@@ -242,18 +208,25 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('logoutBtn').onclick = () => window.location.href = window.location.pathname;
     document.getElementById('closeAdmin').onclick = () => document.getElementById('admin-modal').classList.add('hidden');
     document.getElementById('adminBtn').onclick = (e) => {
-        e.preventDefault(); const p = prompt('Pass:');
+        e.preventDefault(); const p = prompt('Leader Password:');
         if(p === currentCircle.adminPass) { 
             document.getElementById('admin-modal').classList.remove('hidden'); 
-            document.getElementById('adminCircleNameInput').value = currentCircle.name; 
-            document.getElementById('adminAiKey').value = currentCircle.aiKey || ''; 
+            document.getElementById('adminCircleNameInput').value = currentCircle.name;
+            document.getElementById('adminAiKey').parentElement.style.display = 'none'; // Hide AI Key for Circle Leaders
+        }
+    };
+    document.getElementById('masterAdminBtn').onclick = async (e) => {
+        e.preventDefault(); const p = prompt('System Master Password:');
+        if(p === 'master') {
+            const db = await callBackend({ action: 'getAllCircles' });
+            const newKey = prompt('System-wide Gemini API Key:', db.masterConfig?.aiKey || '');
+            if(newKey !== null) { await callBackend({ action: 'updateMasterConfig', aiKey: newKey }); showToast("✅ システム設定を保存しました(Master)"); }
         }
     };
     document.getElementById('saveAdminBtn').onclick = async () => {
         const name = document.getElementById('adminCircleNameInput').value;
-        const key = document.getElementById('adminAiKey').value;
-        await callBackend({ action: 'updateConfig', circleId: currentCircle.id, name, aiKey: key });
-        showToast("✅ 設定を保存しました！"); 
+        await callBackend({ action: 'updateConfig', circleId: currentCircle.id, name });
+        showToast("✅ サークル設定を保存しました。");
         setTimeout(() => document.getElementById('admin-modal').classList.add('hidden'), 1000);
         updateDataAndUI();
     };
@@ -266,10 +239,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const oldM = currentCircle.members[currentUser.id] || { totalFans: 0, targetFans: 3000000 };
                 const newFans = oldM.totalFans + inc;
                 await callBackend({ action: 'updateFans', circleId: currentCircle.id, fans: newFans });
-                if (oldM.totalFans < oldM.targetFans && newFans >= oldM.targetFans) {
-                    launchConfetti();
-                    showToast("🎉 目標達成！！素晴らしいです！！", "success");
-                } else { showToast(`${(inc/10000).toFixed(1)}万ファン獲得！`); }
+                if (oldM.totalFans < oldM.targetFans && newFans >= oldM.targetFans) { launchConfetti(); showToast("🎉 目標達成！！", "success"); }
+                else { showToast(`+${(inc/10000).toFixed(1)}万ファン！`); }
                 updateDataAndUI();
             }
         }
@@ -296,15 +267,19 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 async function callBackend(p) {
     let db = JSON.parse(localStorage.getItem(DB_KEY));
-    if (!db) { db = { circles: { 'circle-1': { id: 'circle-1', name: 'NPC@サークル', adminId: 'admin', adminPass: '1234', totalFans: 1500000, members: { 'npc-1': { name: 'NPC', totalFans: 500000, targetFans: 3000000, history: [10, 20, 30] } }, timeline: [], wisdom: [] } }, userToCircles: {} }; localStorage.setItem(DB_KEY, JSON.stringify(db)); }
+    if (!db) { db = { circles: { 'circle-1': { id: 'circle-1', name: 'NPC@サークル', adminId: 'admin', adminPass: '1234', totalFans: 1500000, members: { 'npc-1': { name: 'NPC', totalFans: 500000, targetFans: 3000000, history: [10, 20, 30] } }, timeline: [] } }, userToCircles: {}, globalWisdom: [], masterConfig: { aiKey: '' } }; localStorage.setItem(DB_KEY, JSON.stringify(db)); }
     if (p.action === 'init' || p.action === 'getAllCircles') return db;
     if (p.action === 'getCircleData') return { success: true, circle: db.circles[p.circleId] };
-    if (p.action === 'updateConfig') { db.circles[p.circleId].name = p.name; db.circles[p.circleId].aiKey = p.aiKey; localStorage.setItem(DB_KEY, JSON.stringify(db)); return { success: true }; }
+    if (p.action === 'updateConfig') { db.circles[p.circleId].name = p.name; localStorage.setItem(DB_KEY, JSON.stringify(db)); return { success: true }; }
+    if (p.action === 'updateMasterConfig') { db.masterConfig.aiKey = p.aiKey; localStorage.setItem(DB_KEY, JSON.stringify(db)); return { success: true }; }
     if (p.action === 'postTimeline') {
         const c = db.circles[p.circleId]; if(!c.timeline) c.timeline = [];
         c.timeline.push({ userName: p.userName, text: p.text, time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}), image: p.image, aiComment: p.aiComment });
-        const k={'スタミナ':'ステータス','スピード':'ステータス','根性':'ステータス','逃げ':'脚質','先行':'脚質','因子':'育成','継承':'育成'};
-        for(let x in k) if(p.text.includes(x)) { if(!c.wisdom) c.wisdom = []; if(!c.wisdom.some(w=>w.text===p.text)) c.wisdom.push({category: k[x], text: p.text}); }
+        const k={'スタミナ':'ステータス','スピード':'ステータス','根性':'ステータス','逃げ':'脚質','先行':'脚質','因子':'育成','継承':'育成','サポカ':'編成','賢さ':'ステータス'};
+        for(let x in k) if(p.text.includes(x)) { 
+            if(!db.globalWisdom) db.globalWisdom = []; 
+            if(!db.globalWisdom.some(w=>w.text===p.text)) db.globalWisdom.push({category: k[x], text: p.text}); 
+        }
         localStorage.setItem(DB_KEY, JSON.stringify(db)); return { success: true };
     }
     if (p.action === 'updateFans') {

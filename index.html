@@ -75,8 +75,9 @@
             </div>
             <a href="#" class="nav-link active" data-target="home"><span class="material-icons-outlined">home</span><div class="nav-text"><span>Home</span><span class="sub">ホーム</span></div></a>
             <a href="#" class="nav-link" id="statsBtn"><span class="material-icons-outlined">analytics</span><div class="nav-text"><span>Stats</span><span class="sub">分析・AI</span></div></a>
-            <a href="#" class="nav-link" id="adminBtn"><span class="material-icons-outlined">admin_panel_settings</span><div class="nav-text"><span>Admin</span><span class="sub">管理者</span></div></a>
+            <a href="#" class="nav-link" id="adminBtn"><span class="material-icons-outlined">settings_applications</span><div class="nav-text"><span>Manage</span><span class="sub">サークル管理</span></div></a>
             <div class="nav-actions">
+                <a href="#" id="masterAdminBtn" class="text-link" style="margin-right:15px; opacity:0.3;"><span class="material-icons-outlined" style="font-size:16px;">security</span></a>
                 <a href="guide.html" target="_blank" class="text-link" style="margin-right:15px; font-size:11px;"><span class="material-icons-outlined" style="font-size:16px;">help_outline</span> ガイド</a>
                 <button id="switchCircleBtn" class="glass-btn">切替</button>
                 <button id="logoutBtn" class="text-link"><span class="material-icons-outlined">logout</span></button>
@@ -138,15 +139,15 @@
                 <div class="members-grid-mini" id="membersGrid"></div>
             </div>
 
-            <!-- AI Accumulated Wisdom -->
-            <div class="side-card glass-panel" id="wisdomCard" style="background:linear-gradient(135deg, rgba(224, 195, 132, 0.1), rgba(255, 255, 255, 1)); border-left:4px solid var(--secondary);">
+            <!-- Uma-Wiki (AI Auto-Accumulation) -->
+            <div class="side-card glass-panel" id="wisdomCard" style="background:linear-gradient(135deg, rgba(224, 195, 132, 0.05), rgba(255, 255, 255, 1)); border-left:4px solid var(--secondary);">
                 <div class="card-header">
-                    <h3 style="display:flex; align-items:center; gap:8px;"><span class="material-icons-outlined" style="color:var(--secondary);">auto_awesome</span> AI Wisdom</h3>
-                    <p>みんなのつぶやきから蓄積された攻略知識</p>
+                    <h3 style="display:flex; align-items:center; gap:8px;"><span class="material-icons-outlined" style="color:var(--secondary);">auto_stories</span> Uma-Wiki</h3>
+                    <p>AIが分析したサークル独自の攻略ノート（閲覧専用）</p>
                 </div>
                 <div id="aiWisdomContent" style="font-size:13px; line-height:1.6; color:var(--text-dark);">
                     <!-- AI summarized content here -->
-                    つぶやきを待機中... メンバーが攻略情報を投稿するとAIが要約を開始します。
+                    ここには、上の『パドック』で投稿された攻略情報が、AIの手によって自動的に抽出・整理されて表示されます。
                 </div>
             </div>
 
@@ -190,8 +191,13 @@
 
     <!-- Other Modals (Admin, etc.) same as before but simplified -->
     <div id="admin-modal" class="modal-overlay hidden">
-        <div class="glass-panel" style="width:500px;">
-            <div class="modal-header"><h3>Admin</h3><span id="closeAdmin" class="material-icons-outlined">close</span></div>
+        <div class="glass-panel" style="width:500px; padding:30px;">
+            <div class="modal-header">
+                <h3><span class="material-icons-outlined">settings</span> Leader Settings</h3>
+                <span id="closeAdmin" class="material-icons-outlined" style="cursor:pointer;">close</span>
+            </div>
+            <p style="font-size:11px; color:var(--text-muted); margin-bottom:20px;">※サークルリーダー（部長級）限定の設定パネルです。</p>
+
             <div class="scroll-list" style="height:400px; padding-right:10px;">
                 <div class="form-group"><label>Circle Name</label><input type="text" id="adminCircleNameInput" class="glass-input"></div>
                 <div class="form-group"><label>Approved Join Requests</label><div id="adminJoinRequests" class="inner-box"></div></div>
