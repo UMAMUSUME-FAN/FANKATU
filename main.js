@@ -313,30 +313,28 @@ document.addEventListener('DOMContentLoaded', async () => {
 async function callBackend(p) {
     if (GAS_ENDPOINT && p.action === 'postTimeline') {
         try {
-            fetch(GAS_ENDPOINT, {
-                method: 'POST',
-                mode: 'no-cors',
-                body: JSON.stringify({ ...p, currentUser: currentUser })
-            });
+            fetch(GAS_ENDPOINT, { method: 'POST', mode: 'no-cors', body: JSON.stringify({ ...p, currentUser: currentUser }) });
         } catch (e) { console.error("GAS Push Error:", e); }
     }
 
     let db = JSON.parse(localStorage.getItem(DB_KEY));
-    if (!db) { db = { circles: { 'circle-1': { id: 'circle-1', name: 'NPC@サークル', adminId: 'admin', adminPass: '1234', totalFans: 1500000, members: { 'npc-1': { name: 'NPC', totalFans: 500000, targetFans: 3000000, history: [10, 20, 30] } }, timeline: [] } }, userToCircles: {}, globalWisdom: [], masterConfig: { aiKey: '' } }; localStorage.setItem(DB_KEY, JSON.stringify(db)); }
+    if (!db) { db = { circles: {}, userToCircles: {}, globalWisdom: [], masterConfig: { aiKey: '' } }; }
+    if (!db.circles['circle-1']) { db.circles['circle-1'] = { id: 'circle-1', name: 'NPC@サークル', members: {}, timeline: [] }; }
+
     if (p.action === 'init' || p.action === 'getAllCircles') return db;
-    if (p.action === 'getCircleData') return { success: true, circle: db.circles[p.circleId] };
-    if (p.action === 'updateConfig') { db.circles[p.circleId].name = p.name; localStorage.setItem(DB_KEY, JSON.stringify(db)); return { success: true }; }
+    
+    // サークルIDの特定 (フォールバック付)
+    let cid = p.circleId || (currentCircle ? currentCircle.id : 'circle-1');
+    if (!db.circles[cid]) cid = 'circle-1';
+    let targetCircle = db.circles[cid];
+
+    if (p.action === 'getCircleData') return { success: true, circle: targetCircle };
+    if (p.action === 'updateConfig') { targetCircle.name = p.name; localStorage.setItem(DB_KEY, JSON.stringify(db)); return { success: true }; }
     if (p.action === 'updateMasterConfig') { if(!db.masterConfig) db.masterConfig = { aiKey: '' }; db.masterConfig.aiKey = p.aiKey; localStorage.setItem(DB_KEY, JSON.stringify(db)); return { success: true }; }
+    
     if (p.action === 'postTimeline') {
-        let cid = p.circleId || (currentCircle ? currentCircle.id : 'circle-1');
-        let c = db.circles[cid];
-        if (!c) {
-            // サークルが見つからない場合は自動生成またはフォールバック
-            db.circles['circle-1'] = db.circles['circle-1'] || { id: 'circle-1', name: '復旧されたサークル', timeline: [] };
-            c = db.circles['circle-1'];
-        }
-        if(!c.timeline) c.timeline = [];
-        c.timeline.push({ userName: p.userName, text: p.text, time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}), images: p.images, aiComment: p.aiComment });
+        if(!targetCircle.timeline) targetCircle.timeline = [];
+        targetCircle.timeline.push({ userName: p.userName, text: p.text, time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}), images: p.images, aiComment: p.aiComment });
         try {
             localStorage.setItem(DB_KEY, JSON.stringify(db));
             return { success: true };
@@ -350,12 +348,14 @@ async function callBackend(p) {
             return { success: true };
         }
     }
+    
     if (p.action === 'updateFans') {
-        let cid = p.circleId || (currentCircle ? currentCircle.id : 'circle-1');
-        const c = db.circles[cid] || db.circles['circle-1'];
-        let m = c.members[currentUser.id]; if(!m) m = c.members[currentUser.id] = { name: currentUser.name, totalFans: 0, targetFans: 3000000, history: [], icon: currentUser.avatar };
+        let m = targetCircle.members[currentUser.id]; 
+        if(!m) m = targetCircle.members[currentUser.id] = { name: currentUser.name, totalFans: 0, targetFans: 3000000, history: [], icon: currentUser.avatar };
         m.totalFans = p.fans; m.history.push(p.fans);
-        c.totalFans = Object.values(c.members).reduce((s,x)=>s+x.totalFans, 0); localStorage.setItem(DB_KEY, JSON.stringify(db)); return { success: true };
+        targetCircle.totalFans = Object.values(targetCircle.members).reduce((s,x)=>s+x.totalFans, 0); 
+        localStorage.setItem(DB_KEY, JSON.stringify(db)); 
+        return { success: true };
     }
     return db;
 }
