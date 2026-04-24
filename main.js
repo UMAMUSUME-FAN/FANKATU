@@ -326,10 +326,15 @@ async function callBackend(p) {
     if (p.action === 'init' || p.action === 'getAllCircles') return db;
     if (p.action === 'getCircleData') return { success: true, circle: db.circles[p.circleId] };
     if (p.action === 'updateConfig') { db.circles[p.circleId].name = p.name; localStorage.setItem(DB_KEY, JSON.stringify(db)); return { success: true }; }
-    if (p.action === 'updateMasterConfig') { db.masterConfig.aiKey = p.aiKey; localStorage.setItem(DB_KEY, JSON.stringify(db)); return { success: true }; }
+    if (p.action === 'updateMasterConfig') { if(!db.masterConfig) db.masterConfig = { aiKey: '' }; db.masterConfig.aiKey = p.aiKey; localStorage.setItem(DB_KEY, JSON.stringify(db)); return { success: true }; }
     if (p.action === 'postTimeline') {
-        const c = db.circles[p.circleId];
-        if (!c) return { success: false, error: "サークルデータが見つかりません。" };
+        let cid = p.circleId || (currentCircle ? currentCircle.id : 'circle-1');
+        let c = db.circles[cid];
+        if (!c) {
+            // サークルが見つからない場合は自動生成またはフォールバック
+            db.circles['circle-1'] = db.circles['circle-1'] || { id: 'circle-1', name: '復旧されたサークル', timeline: [] };
+            c = db.circles['circle-1'];
+        }
         if(!c.timeline) c.timeline = [];
         c.timeline.push({ userName: p.userName, text: p.text, time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}), images: p.images, aiComment: p.aiComment });
         try {
@@ -346,7 +351,9 @@ async function callBackend(p) {
         }
     }
     if (p.action === 'updateFans') {
-        const c = db.circles[p.circleId]; let m = c.members[currentUser.id]; if(!m) m = c.members[currentUser.id] = { name: currentUser.name, totalFans: 0, targetFans: 3000000, history: [], icon: currentUser.avatar };
+        let cid = p.circleId || (currentCircle ? currentCircle.id : 'circle-1');
+        const c = db.circles[cid] || db.circles['circle-1'];
+        let m = c.members[currentUser.id]; if(!m) m = c.members[currentUser.id] = { name: currentUser.name, totalFans: 0, targetFans: 3000000, history: [], icon: currentUser.avatar };
         m.totalFans = p.fans; m.history.push(p.fans);
         c.totalFans = Object.values(c.members).reduce((s,x)=>s+x.totalFans, 0); localStorage.setItem(DB_KEY, JSON.stringify(db)); return { success: true };
     }
