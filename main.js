@@ -1,5 +1,5 @@
 const DB_KEY = 'uma_mock_db';
-const GAS_ENDPOINT = ''; 
+const GAS_ENDPOINT = 'https://script.google.com/macros/s/AKfycbzyyeoQXI8HD9bVfAY5Eg3XMql5A9Ae2SS14YNrrhKECKYXcW-zJ8COsW8_FjKzjUk/exec'; 
 let DISCORD_CLIENT_ID = '1497168159210340484';
 
 let currentUser = null;
@@ -201,15 +201,16 @@ document.addEventListener('DOMContentLoaded', async () => {
             const db = await callBackend({ action: 'getAllCircles' });
             let aiComment = null;
             if (db.masterConfig?.aiKey && currentImages.length > 0) {
-                showToast("AIが画像から戦略を分析中...");
-                aiComment = await callGemini(db.masterConfig.aiKey, "この画像から攻略アドバイスを100文字以内でして。", currentImages);
+                showToast("AIが画像からデータを抽出・分析中...");
+                const ocrPrompt = "画像を見て、ウマ娘の名前、ファン数、スピード等のステータス、因子、脚質を可能な限り抽出し、読みやすく箇条書きで文字起こししてください。また、データ化しやすいように末尾に【DATA】: {JSON形式の数値データ} を付与してください。";
+                aiComment = await callGemini(db.masterConfig.aiKey, ocrPrompt, currentImages);
             }
             
             const res = await callBackend({ 
                 action: 'postTimeline', 
                 circleId: currentCircle.id, 
                 userName: currentUser.name, 
-                text: timelineInput.value || "#スクショ投稿", 
+                text: timelineInput.value || (aiComment ? "#AIデータ化送信" : "#スクショ投稿"), 
                 images: currentImages, 
                 aiComment: aiComment 
             });
@@ -274,9 +275,52 @@ document.addEventListener('DOMContentLoaded', async () => {
     const closeStats = document.getElementById('closeStatsBtn'); if(closeStats) closeStats.onclick = () => { const m = document.getElementById('masterStatsOverlay'); if(m) m.classList.add('hidden'); };
     const switchBtn = document.getElementById('switchCircleBtn'); if(switchBtn) switchBtn.onclick = showPortal;
     const adminBtn = document.getElementById('adminBtn'); if(adminBtn) adminBtn.onclick = (e) => { e.preventDefault(); const p = prompt('Leader PW:'); if(p === currentCircle.adminPass) { const am = document.getElementById('admin-modal'); if(am) am.classList.remove('hidden'); } };
+
+    // --- Missing Functions ---
+    function renderGrowthChart() {
+        const ctx = document.getElementById('growthChart'); if(!ctx || !currentCircle) return;
+        const my = currentCircle.members[currentUser.id] || { history: [] };
+        if(window.myChart) window.myChart.destroy();
+        window.myChart = new Chart(ctx, {
+            type: 'line',
+            data: { labels: my.history.map((_,i)=>`Day ${i+1}`), datasets: [{ label: 'ファン数推移', data: my.history, borderColor: '#fba1ba', backgroundColor: 'rgba(251,161,186,0.1)', fill: true, tension: 0.4 }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: false, grid: { color: 'rgba(0,0,0,0.03)' } }, x: { grid: { display: false } } } }
+        });
+    }
+
+    function launchConfetti() {
+        for(let i=0; i<50; i++) {
+            const c = document.createElement('div'); c.style = `position:fixed; width:10px; height:10px; background:hsl(${Math.random()*360},70%,70%); left:${Math.random()*100}%; top:-10px; z-index:9999; border-radius:3px; pointer-events:none;`;
+            document.body.appendChild(c);
+            const a = c.animate([{ transform: 'translateY(0) rotate(0)', opacity: 1 }, { transform: `translateY(${window.innerHeight}px) rotate(${Math.random()*720}deg)`, opacity: 0 }], { duration: 2000 + Math.random()*3000, easing: 'cubic-bezier(0,1,1,1)' });
+            a.onfinish = () => c.remove();
+        }
+    }
+
+    async function generateAIAnalysis() {
+        const area = document.getElementById('aiAnalysisResult'); if(!area) return;
+        area.innerHTML = '<div class="loading-spinner"></div> 分析中...';
+        const db = await callBackend({ action: 'getAllCircles' });
+        if(!db.masterConfig?.aiKey) { area.innerHTML = "⚠️ システム管理者がGemini APIキーを設定していません。"; return; }
+        const my = currentCircle.members[currentUser.id] || { totalFans: 0, targetFans: 3000000 };
+        const progress = Math.floor((my.totalFans / my.targetFans) * 100);
+        const p = `ウマ娘のサークルメンバーへのアドバイスをお願いします。現在ファン数は目標の${progress}%に達しています。ポジティブでモチベーションが上がるアドバイスを150文字以内でください。`;
+        const advice = await callGemini(db.masterConfig.aiKey, p);
+        area.innerHTML = advice || "分析に失敗しました。時間をおいて試してください。";
+    }
 });
 
 async function callBackend(p) {
+    if (GAS_ENDPOINT && p.action === 'postTimeline') {
+        try {
+            fetch(GAS_ENDPOINT, {
+                method: 'POST',
+                mode: 'no-cors',
+                body: JSON.stringify({ ...p, currentUser: currentUser })
+            });
+        } catch (e) { console.error("GAS Push Error:", e); }
+    }
+
     let db = JSON.parse(localStorage.getItem(DB_KEY));
     if (!db) { db = { circles: { 'circle-1': { id: 'circle-1', name: 'NPC@サークル', adminId: 'admin', adminPass: '1234', totalFans: 1500000, members: { 'npc-1': { name: 'NPC', totalFans: 500000, targetFans: 3000000, history: [10, 20, 30] } }, timeline: [] } }, userToCircles: {}, globalWisdom: [], masterConfig: { aiKey: '' } }; localStorage.setItem(DB_KEY, JSON.stringify(db)); }
     if (p.action === 'init' || p.action === 'getAllCircles') return db;
@@ -285,16 +329,20 @@ async function callBackend(p) {
     if (p.action === 'updateMasterConfig') { db.masterConfig.aiKey = p.aiKey; localStorage.setItem(DB_KEY, JSON.stringify(db)); return { success: true }; }
     if (p.action === 'postTimeline') {
         const c = db.circles[p.circleId];
-        if (!c) return { success: false, error: "サークルデータが見つかりません。再ログインしてください。" };
+        if (!c) return { success: false, error: "サークルデータが見つかりません。" };
         if(!c.timeline) c.timeline = [];
         c.timeline.push({ userName: p.userName, text: p.text, time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}), images: p.images, aiComment: p.aiComment });
-        const k={'スタミナ':'ステータス','スピード':'ステータス','根性':'ステータス','逃げ':'脚質','先行':'脚質','因子':'育成','継承':'育成','サポカ':'編成','賢さ':'ステータス'};
-        for(let x in k) if(p.text.includes(x)) { if(!db.globalWisdom) db.globalWisdom = []; if(!db.globalWisdom.some(w=>w.text===p.text)) db.globalWisdom.push({category: k[x], text: p.text}); }
         try {
             localStorage.setItem(DB_KEY, JSON.stringify(db));
             return { success: true };
         } catch(e) {
-            throw new Error("保存容量がいっぱいです。古い投稿を削除するか、画像を減らして試してください。");
+            for (let circ of Object.values(db.circles)) {
+                if (circ.timeline && circ.timeline.length > 5) {
+                    for (let i = 0; i < Math.min(10, circ.timeline.length - 1); i++) { circ.timeline[i].images = []; }
+                }
+            }
+            localStorage.setItem(DB_KEY, JSON.stringify(db));
+            return { success: true };
         }
     }
     if (p.action === 'updateFans') {
