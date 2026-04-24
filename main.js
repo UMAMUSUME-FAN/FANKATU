@@ -239,20 +239,27 @@ document.addEventListener('DOMContentLoaded', async () => {
 
             const db = await callBackend({ action: 'getAllCircles' });
             let aiComment = null;
-            if (db.masterConfig?.aiKey && currentImages.length > 0) {
-                showToast("AIが画像から攻略データとファン数を抽出中...");
-                const ocrPrompt = "画像を見て攻略情報を抽出してください。もし『総獲得ファン数』が映っていれば、その数値だけを必ず1行目に『【FAN_COUNT】: 123456789』という形式で書いてください。続けてキャラクター名やステータスも箇条書きで分析してください。";
-                aiComment = await callGemini(db.masterConfig.aiKey, ocrPrompt, currentImages);
-                
-                // ファン数の自動同期
-                if (aiComment) {
-                    const fanMatch = aiComment.match(/【FAN_COUNT】:\s*(\d+[0-9,]*)/);
-                    if (fanMatch) {
-                        const extractedFans = parseInt(fanMatch[1].replace(/,/g, '')) || 0;
-                        if (extractedFans > 0) {
-                            await callBackend({ action: 'updateFans', circleId: currentCircle.id, fans: extractedFans });
-                            showToast(`実績を同期更新しました: ${extractedFans.toLocaleString()}人`);
+            if (currentImages.length > 0) {
+                if (!db.masterConfig?.aiKey) {
+                    showToast("⚠️ APIキーが未設定のため、AI解析をスキップします。設定からキーを入力してください。", "error");
+                } else {
+                    showToast("AIが画像からデータを読み取り中...");
+                    const ocrPrompt = "画像を見て攻略情報を抽出してください。もし『総獲得ファン数』が映っていれば、その数値だけを必ず1行目に『【FAN_COUNT】: 123456789』という形式で書いてください。カンマは含めても含めなくても良いです。";
+                    aiComment = await callGemini(db.masterConfig.aiKey, ocrPrompt, currentImages);
+                    
+                    if (aiComment) {
+                        // 強力な数値抽出 (1,234,567人 や 1234567 等に対応)
+                        const fanMatch = aiComment.match(/【FAN_COUNT】:\s*([0-9,]+)/);
+                        if (fanMatch) {
+                            const rawValue = fanMatch[1].replace(/,/g, '');
+                            const extractedFans = parseInt(rawValue) || 0;
+                            if (extractedFans > 0) {
+                                await callBackend({ action: 'updateFans', circleId: currentCircle.id, fans: extractedFans });
+                                showToast(`実績を同期しました: ${extractedFans.toLocaleString()}人`);
+                            }
                         }
+                    } else {
+                        showToast("AI解析に失敗しました。通信環境を確認してください。", "error");
                     }
                 }
             }
