@@ -21,17 +21,18 @@ async function callBackend(p) {
     } catch (e) { return null; }
 }
 
-async function resizeImage(base64Str, maxWidth = 400) {
+// 解析精度向上のため、1280pxまで高画質化
+async function resizeImage(base64Str, maxWidth = 1280) {
     return new Promise((resolve) => {
         const img = new Image(); img.src = base64Str;
         img.onload = () => {
             const canvas = document.createElement('canvas');
-            const scale = maxWidth / img.width;
-            if(scale >= 1) return resolve(base64Str);
-            canvas.width = maxWidth; canvas.height = img.height * scale;
+            let w = img.width; let h = img.height;
+            if (w > maxWidth) { h = h * (maxWidth / w); w = maxWidth; }
+            canvas.width = w; canvas.height = h;
             const ctx = canvas.getContext('2d');
-            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-            resolve(canvas.toDataURL('image/jpeg', 0.7));
+            ctx.drawImage(img, 0, 0, w, h);
+            resolve(canvas.toDataURL('image/jpeg', 0.85)); // 画質を85%にアップ
         };
     });
 }
@@ -63,6 +64,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     async function showPortal() {
+        if(!portalOverlay) return;
         portalOverlay.classList.remove('hidden');
         if(currentUser) {
             document.getElementById('portalUserName').textContent = currentUser.name;
@@ -71,7 +73,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.getElementById('logoutBtnFromPortal').onclick = () => window.location.reload();
         const scBtn = document.getElementById('showCreateCircleBtn');
         if(scBtn) scBtn.onclick = () => document.getElementById('create-circle-modal').classList.remove('hidden');
-        document.getElementById('cancelCreateCircle').onclick = () => document.getElementById('create-circle-modal').classList.add('hidden');
         document.getElementById('confirmCreateCircle').onclick = async () => {
             const name = document.getElementById('newCircleName').value; if(!name) return;
             const db = await callBackend({ action: 'createCircle', name: name });
@@ -111,53 +112,47 @@ document.addEventListener('DOMContentLoaded', async () => {
     window.joinCircle = async cid => { await callBackend({ action: 'joinCircle', circleId: cid }); renderPortalCircles(); };
     window.leaveCircle = async (cid, n) => { if(confirm(`『${n}』から脱退しますか？`)) { await callBackend({ action:'leaveCircle', circleId: cid }); renderPortalCircles(); } };
 
-    // --- ハイブリッドAI解析 (AI抽出 + 手動確認) ---
+    // --- 高精度AI解析 ---
     async function handleImageUpload(file) {
         if(!file || !file.type.startsWith('image/')) return;
-        showToast("AIがファン数を読み取り中...");
+        showToast("AIが高画質解析中...🎥");
         
         const reader = new FileReader();
         reader.onload = async (ev) => {
-            const rawBase64 = ev.target.result;
-            const smallBase64 = await resizeImage(rawBase64, 500); 
+            const smallBase64 = await resizeImage(ev.target.result, 1280); 
             const pureBase64 = smallBase64.split(',')[1];
 
             try {
-                // AIに解析させる
                 const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${AI_KEY}`, {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         contents: [{ parts: [
-                            { text: "ウマ娘の画面から、『ファン 総獲得数』の右側に記載されている数字だけを抽出して。カンマは不要。数字以外は一切答えないで。" },
+                            { text: "ウマ娘のプロフィール画面です。ここから『ファン 総獲得数』の右隣に書かれている数字だけを抽出して。読み間違えないように慎重に。カンマは不要。数字以外の文字は1文字も答えないで。" },
                             { inline_data: { mime_type: "image/jpeg", data: pureBase64 } }
                         ]}]
                     })
                 });
                 const res = await response.json();
-                console.log("AI Response:", res);
-
-                if (!res.candidates || res.candidates.length === 0) {
-                    const reason = res.promptFeedback ? "安全フィルター等により解析が拒否されました" : "AIから回答が得られませんでした";
-                    throw new Error(reason);
-                }
-
-                const aiFans = res.candidates[0].content.parts[0].text.trim().replace(/,/g, '');
+                if (!res.candidates) throw new Error("AIが画像を認識できませんでした");
                 
-                // 確認ダイアログを出す
-                const confirmedFans = prompt(`AIは「${parseInt(aiFans).toLocaleString() || 0}」ファンだと読み取りました。\n修正が必要な場合は書き換えてOKを押してください。`, aiFans);
+                const rawText = res.candidates[0].content.parts[0].text.trim();
+                const aiFans = rawText.replace(/[^0-9]/g, ''); // 数字以外を徹底排除
+                
+                if(!aiFans) throw new Error("画像から数字が見つかりませんでした");
+
+                const fans = parseInt(aiFans);
+                const confirmedFans = prompt(`AIは「${fans.toLocaleString()}」ファンだと読み取りました。\n合っていればOK、違っていれば修正してください。`, fans);
                 
                 if (confirmedFans !== null) {
-                    const fans = parseInt(confirmedFans.replace(/,/g, ''));
-                    if(!isNaN(fans)) {
-                        showToast(`ファン数 ${fans.toLocaleString()} を記録しました🏆`);
-                        await callBackend({ action: 'updateFans', circleId: currentCircle.id, fans: fans });
-                        await callBackend({ action: 'postTimeline', circleId: currentCircle.id, text: `AI解析・確認：ファン数${fans.toLocaleString()}`, images: [smallBase64] });
-                        updateDashboard();
-                    }
+                    const finalFans = parseInt(confirmedFans.replace(/,/g, ''));
+                    showToast("同期中...");
+                    await callBackend({ action: 'updateFans', circleId: currentCircle.id, fans: finalFans });
+                    await callBackend({ action: 'postTimeline', circleId: currentCircle.id, text: `AI解析：ファン数${finalFans.toLocaleString()}`, images: [smallBase64] });
+                    showToast("更新完了！🏆");
+                    updateDashboard();
                 }
             } catch(e) {
-                console.error(e);
-                showToast(`解析エラー: ${e.message || "画像の数字が読み取れませんでした"}`, "error");
+                showToast(`解析失敗: ${e.message}`, "error");
             }
         };
         reader.readAsDataURL(file);
@@ -186,10 +181,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         const my = c.members[currentUser?.id] || { totalFans: 0, targetFans: 3000000, history: [] };
         
         document.querySelector('.circle-name-display').textContent = c.name;
-        document.getElementById('displayTotalTarget').textContent = (my.targetFans).toLocaleString();
-        document.getElementById('displayRemaining').textContent = Math.max(0, my.targetFans - my.totalFans).toLocaleString();
-        document.getElementById('totalFanProgress').style.width = Math.min(100, (my.totalFans / my.targetFans) * 100) + '%';
-        document.getElementById('totalFanPercentText').textContent = Math.floor((my.totalFans / my.targetFans) * 100) + '%';
+        document.getElementById('displayTotalTarget').textContent = (my.targetFans || 0).toLocaleString();
+        document.getElementById('displayRemaining').textContent = Math.max(0, (my.targetFans || 0) - my.totalFans).toLocaleString();
+        document.getElementById('totalFanProgress').style.width = Math.min(100, (my.totalFans / (my.targetFans || 1)) * 100) + '%';
+        document.getElementById('totalFanPercentText').textContent = Math.floor((my.totalFans / (my.targetFans || 1)) * 100) + '%';
         
         document.getElementById('userNameDisplay').textContent = currentUser?.name || "Member";
         if(currentUser?.avatar) document.getElementById('userAvatar').style.backgroundImage = `url('${currentUser.avatar}')`;
