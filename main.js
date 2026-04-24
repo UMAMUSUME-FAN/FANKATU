@@ -97,13 +97,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         if(!currentCircle) return;
         const c = currentCircle;
         const uid = currentUser?.id || 'guest';
-        const my = c.members[uid] || { totalFans: 0, targetFans: 3000000, history: [] };
+        
+        // 個別の設定がなければ、サークル全体の標準目標（defaultTarget）を使う
+        const def = c.defaultTarget || 3000000;
+        const my = c.members[uid] || { totalFans: 0, targetFans: def, history: [] };
         
         const cName = document.getElementById('circleNameDisplay'); if(cName) cName.textContent = c.name;
-        const dt = document.getElementById('displayTotalTarget'); if(dt) dt.textContent = my.targetFans.toLocaleString();
-        const dr = document.getElementById('displayRemaining'); if(dr) dr.textContent = Math.max(0, my.targetFans - (my.totalFans || 0)).toLocaleString();
-        const tp = document.getElementById('totalFanProgress'); if(tp) tp.style.width = Math.min(100, ((my.totalFans || 0) / my.targetFans) * 100) + '%';
-        const tpt = document.getElementById('totalFanPercentText'); if(tpt) tpt.textContent = Math.floor(((my.totalFans || 0) / my.targetFans) * 100) + '%';
+        const dt = document.getElementById('displayTotalTarget'); if(dt) dt.textContent = (my.targetFans || def).toLocaleString();
+        const dr = document.getElementById('displayRemaining'); if(dr) dr.textContent = Math.max(0, (my.targetFans || def) - (my.totalFans || 0)).toLocaleString();
+        const tp = document.getElementById('totalFanProgress'); if(tp) tp.style.width = Math.min(100, ((my.totalFans || 0) / (my.targetFans || def)) * 100) + '%';
+        const tpt = document.getElementById('totalFanPercentText'); if(tpt) tpt.textContent = Math.floor(((my.totalFans || 0) / (my.targetFans || def)) * 100) + '%';
         
         renderGrowthChart(); renderMembers(); renderTimeline(); renderAIWisdom();
     }
@@ -114,13 +117,40 @@ document.addEventListener('DOMContentLoaded', async () => {
         const uid = currentUser?.id || 'guest';
         const my = currentCircle.members[uid] || { totalFans: 0, history: [] };
         
-        let history = (my.history && my.history.length > 0) ? my.history : [0, my.totalFans];
+        // 履歴の整理 (0からスタートして現在のファン数へ)
+        let rawHistory = (my.history && my.history.length > 0) ? my.history : [0];
+        let historyData = rawHistory.length === 1 ? [0, rawHistory[0]] : rawHistory;
         
         if(window.myChart) window.myChart.destroy();
         window.myChart = new Chart(ctx, {
             type: 'line',
-            data: { labels: history.map((_,i)=>`Day ${i+1}`), datasets: [{ label: 'ファン数推移', data: history, borderColor: '#fba1ba', backgroundColor: 'rgba(251,161,186,0.1)', fill: true, tension: 0.4 }] },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: false, grid: { color: 'rgba(0,0,0,0.03)' } }, x: { grid: { display: false } } } }
+            data: { 
+                labels: historyData.map((_,i)=> i === 0 ? "Start" : `Update ${i}`), 
+                datasets: [{ 
+                    label: 'ファン数推移', 
+                    data: historyData, 
+                    borderColor: '#fba1ba', 
+                    backgroundColor: 'rgba(251,161,186,0.1)', 
+                    fill: true, 
+                    tension: 0.3,
+                    pointRadius: 4,
+                    pointBackgroundColor: '#fff',
+                    borderWidth: 3
+                }] 
+            },
+            options: { 
+                responsive: true, 
+                maintainAspectRatio: false, 
+                plugins: { legend: { display: false } }, 
+                scales: { 
+                    y: { 
+                        beginAtZero: true, 
+                        grid: { color: 'rgba(0,0,0,0.03)' },
+                        ticks: { callback: function(value) { return (value / 10000).toLocaleString() + '万'; } }
+                    }, 
+                    x: { grid: { display: false } } 
+                } 
+            }
         });
     }
 
@@ -502,6 +532,7 @@ async function callBackend(p) {
     }
 
     if (p.action === 'updateAllTargets') {
+        targetCircle.defaultTarget = p.target; // サークル全体の標準目標を更新
         Object.values(targetCircle.members).forEach(m => { m.targetFans = p.target; });
         localStorage.setItem(DB_KEY, JSON.stringify(db));
         return { success: true };
