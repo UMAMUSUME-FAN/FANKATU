@@ -415,11 +415,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     const applyTargetBtn = document.getElementById('applyIndividualTargetBtn');
     if(applyTargetBtn) applyTargetBtn.onclick = async () => {
         const target = parseInt(document.getElementById('adminIndividualTarget').value) || 3000000;
-        // ※実際には全メンバーをループして更新するロジックが必要ですが、
-        // 今回は「保存して閉じる」体験を優先して、UIのクローズを実装します。
+        
+        // 実際にバックエンドへ命令を送り、全メンバーのノルマを書き換える
+        await callBackend({ action: 'updateAllTargets', target: target });
+        
         const am = document.getElementById('admin-modal');
         if(am) am.classList.add('hidden');
-        showToast(`全員の目標を ${target.toLocaleString()}人に設定しました`);
+        showToast(`全員のファン数目標を ${target.toLocaleString()}人に設定し、保存しました！`);
         updateDataAndUI();
     };
 
@@ -498,5 +500,12 @@ async function callBackend(p) {
         localStorage.setItem(DB_KEY, JSON.stringify(db)); 
         return { success: true };
     }
+
+    if (p.action === 'updateAllTargets') {
+        Object.values(targetCircle.members).forEach(m => { m.targetFans = p.target; });
+        localStorage.setItem(DB_KEY, JSON.stringify(db));
+        return { success: true };
+    }
+    
     return db;
 }
