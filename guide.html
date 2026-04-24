@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Guide | Uma Tracker</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700&family=Noto+Sans+JP:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet">
+    <style>
+        body { padding: 50px 20px; max-width: 900px; margin: 0 auto; line-height: 1.8; }
+        .guide-card { margin-bottom: 50px; padding: 40px; border-radius: 40px; background: white; box-shadow: 0 10px 40px rgba(0,0,0,0.03); }
+        h1 { font-family: 'Playfair Display', serif; font-size: 48px; text-align: center; margin-bottom: 60px; color: var(--text-dark); }
+        h2 { font-family: 'Playfair Display', serif; font-size: 28px; border-bottom: 3px solid var(--primary); display: inline-block; margin-bottom: 25px; padding-right: 20px; }
+        .step { display: flex; gap: 25px; margin-bottom: 30px; align-items: flex-start; }
+        .step-num { background: var(--primary); color: white; width: 35px; height: 35px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: bold; flex-shrink: 0; }
+        .img-placeholder { width: 100%; height: 300px; background: #fafafa; border-radius: 20px; margin: 20px 0; border: 1px dashed #eee; display: flex; align-items: center; justify-content: center; color: #ccc; flex-direction: column; }
+        .tag-guide { background: #f0f7ff; padding: 20px; border-radius: 20px; border-left: 5px solid #5865F2; }
+    </style>
+</head>
+<body style="background: #fef9fa;">
+
+    <h1>Uma Tracker <br><span style="font-size: 24px; opacity: 0.5;">Manual & Instructions</span></h1>
+
+    <div class="guide-card">
+        <h2>1. 招待とログイン</h2>
+        <div class="step">
+            <div class="step-num">1</div>
+            <div>
+                <p>Discordアカウントを使用してログインします。ログイン後、既存のサークルを探すか、自分で新しいサークルを作成できます。</p>
+            </div>
+        </div>
+        <div class="tag-guide">
+            <p>💡 <b>Tip:</b> サークル管理者は「Admin」画面からサークルの招待URLを設定でき、ログイン直後のポータルから簡単にDiscordへ飛べるようになります。</p>
+        </div>
+    </div>
+
+    <div class="guide-card">
+        <h2>2. ファン数の記録 (OCR)</h2>
+        <div class="step">
+            <div class="step-num">2</div>
+            <div>
+                <p>ゲーム内のプロフィール画面などをスクリーンショット（Alt + PrtSc）し、このアプリを開いて <b>Ctrl + V (貼り付け)</b> するだけでファン数が自動加算されます。</p>
+            </div>
+        </div>
+        <div class="img-placeholder">
+            <span class="material-icons-outlined" style="font-size: 60px;">wallpaper</span>
+            <p>プロフィール画面の画像をそのまま貼り付けるだけ！</p>
+        </div>
+    </div>
+
+    <div class="guide-card">
+        <h2>3. Trainers' Paddock</h2>
+        <div class="step">
+            <div class="step-num">3</div>
+            <div>
+                <p>日々の育成報告や攻略情報を投稿できます。<b>ハッシュタグ (#)</b> を使うことで情報を整理でき、クリックで絞り込みも可能です。</p>
+            </div>
+        </div>
+        <div class="tag-guide" style="border-left-color: #e0c384; background: #fffdf8;">
+            <p>🤖 <b>AI Image Vision:</b> 画像を添付して投稿すると、AIがその中身（ステータスやサポカなど）を解析し、最適なアドバイスをリプライします。</p>
+        </div>
+    </div>
+
+    <div class="guide-card">
+        <h2>4. 智慧の継承 (AI Wisdom)</h2>
+        <div class="step">
+            <div class="step-num">4</div>
+            <div>
+                <p>パドック（タイムライン）に投稿された攻略情報は、AIが自動的に要約し画面右側の「AI Wisdom」に蓄積します。これがサークル独自の攻略Wikiになります。</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="guide-card">
+        <h2>5. 管理者設定とGemini API</h2>
+        <div class="step">
+            <div class="step-num">5</div>
+            <div>
+                <p>Admin画面で <b>Google Gemini API Key</b> を設定すると、分析精度が劇的に向上します。完全無料で本物のAI秘書を手に入れることができます。</p>
+            </div>
+        </div>
+        <p style="text-align:center; margin-top:20px;">
+            <a href="index.html" class="glass-btn primary" style="text-decoration:none; display:inline-block;">アプリに戻る</a>
+        </p>
+    </div>
+
+</body>
+</html>
