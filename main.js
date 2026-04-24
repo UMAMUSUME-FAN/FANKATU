@@ -11,6 +11,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     const portalOverlay = document.getElementById('circleSelectionOverlay');
     const appWrapper = document.getElementById('appWrapper');
     const masterStatsOverlay = document.getElementById('masterStatsOverlay');
+    const postModal = document.getElementById('post-modal');
+    const timelineInput = document.getElementById('timelineInput');
+    const previewArea = document.getElementById('timelineImagePreview');
 
     await callBackend({ action: 'init' });
     
@@ -128,12 +131,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         const area = document.getElementById('aiWisdomContent');
         const db = await callBackend({ action: 'getAllCircles' });
         const wisdom = db.globalWisdom || [];
-        
         let allTags = [];
         Object.values(db.circles).forEach(c => { (c.timeline || []).forEach(p => { const tags = p.text.match(/#(\S+)/g); if(tags) allTags.push(...tags); }); });
         const tagCounts = allTags.reduce((acc, t) => (acc[t] = (acc[t] || 0) + 1, acc), {});
         const sortedTags = Object.entries(tagCounts).sort((a,b) => b[1] - a[1]).slice(0, 8);
-
         let tagsHtml = `<div style="margin-bottom:20px; display:flex; flex-wrap:wrap; gap:8px;">`;
         sortedTags.forEach(([tag]) => { tagsHtml += `<span class="hashtag" style="font-size:11px; background:rgba(26, 115, 232, 0.08); padding:4px 10px; border-radius:12px; border:1px solid rgba(26, 115, 232, 0.2);">${tag}</span>`; });
         tagsHtml += `</div><div style="height:1px; background:rgba(0,0,0,0.05); margin-bottom:15px;"></div>`;
@@ -154,13 +155,22 @@ document.addEventListener('DOMContentLoaded', async () => {
         const area = document.getElementById('aiMessageArea'); area.innerHTML = "分析中...";
         const db = await callBackend({ action: 'getAllCircles' });
         const aiKey = db.masterConfig?.aiKey;
-        if (aiKey) {
-            const prompt = `あなたは有能な秘書です。サークル「${currentCircle.name}」の状況（達成率 ${(currentCircle.totalFans/1000000).toFixed(1)}M）を見て短くアドバイスして。`;
-            const result = await callGemini(aiKey, prompt);
-            area.innerHTML = `<div>${result}</div>`;
-        } else {
-            area.innerHTML = `<div style="padding:15px; background:rgba(0,0,0,0.03); border-radius:15px; border:1px dashed #ccc;"><p style="font-weight:bold;">AI Secretary は準備中</p></div>`;
-        }
+        
+        let headerHtml = (aiKey) ? `<div>AIが状況を分析しました。「順調なペースです！」</div>` : `<div style="padding:15px; background:rgba(0,0,0,0.03); border-radius:15px; border:1px dashed #ccc;"><p style="font-weight:bold;">AI Secretary は準備中</p></div>`;
+        area.innerHTML = `
+            ${headerHtml}
+            <button id="copyReceiptBtn" class="glass-btn primary" style="margin-top:20px; width:100%; font-size:12px; height:45px; display:flex; align-items:center; justify-content:center; gap:8px;">
+                <span class="material-icons-outlined" style="font-size:18px;">content_copy</span> 進捗レシートをコピー (共有用)
+            </button>
+        `;
+        document.getElementById('copyReceiptBtn').onclick = () => copyCircleReceipt();
+    }
+
+    function copyCircleReceipt() {
+        const members = Object.values(currentCircle.members);
+        const done = members.filter(m => m.totalFans >= m.targetFans).length;
+        const text = `--- 🧧 Uma Tracker Report ---\nCircle: ${currentCircle.name}\nTotal Fans: ${(currentCircle.totalFans/1000000).toFixed(2)}M\nGoal: ${done} members reached\n---------------------------`;
+        navigator.clipboard.writeText(text); showToast("✅ コピーしました！");
     }
 
     async function callGemini(key, prompt, imageBase64s = []) {
@@ -170,12 +180,11 @@ document.addEventListener('DOMContentLoaded', async () => {
             imageBase64s.forEach(img => parts.push({ inline_data: { mime_type: "image/jpeg", data: img.split(',')[1] } }));
             const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts }] }) });
             const data = await res.json(); return data.candidates[0].content.parts[0].text;
-        } catch (e) { return "AIが少しお疲れのようです。"; }
+        } catch (e) { return "AI分析に失敗しました。"; }
     }
 
     // --- Timeline Image Handling ---
     let currentImages = [];
-    const previewArea = document.getElementById('timelineImagePreview');
     const updatePreview = () => {
         previewArea.innerHTML = '';
         if (currentImages.length === 0) { previewArea.style.display = 'none'; return; }
@@ -188,62 +197,48 @@ document.addEventListener('DOMContentLoaded', async () => {
     };
     window.removeImage = (idx) => { currentImages.splice(idx, 1); updatePreview(); };
 
+    // --- Modal Logic ---
+    document.getElementById('openPostModalBtn').onclick = () => { postModal.classList.remove('hidden'); timelineInput.focus(); };
+    document.getElementById('closePostModal').onclick = () => postModal.classList.add('hidden');
+    
     document.getElementById('postTimelineBtn').onclick = async () => {
-        const input = document.getElementById('timelineInput');
-        if(!input.value && currentImages.length === 0) return;
+        if(!timelineInput.value && currentImages.length === 0) return;
         const btn = document.getElementById('postTimelineBtn');
         try {
             btn.disabled = true;
             const db = await callBackend({ action: 'getAllCircles' });
             let aiComment = null;
             if (db.masterConfig?.aiKey && currentImages.length > 0) {
-                showToast("AIが画像からヒントを抽出中...");
-                aiComment = await callGemini(db.masterConfig.aiKey, "これらの画像を分析して、攻略ヒントを100文字以内でして。", currentImages);
+                showToast("AIが画像分析中...");
+                aiComment = await callGemini(db.masterConfig.aiKey, "このウマ娘の画像を分析してヒントを教えて。", currentImages);
             }
-            await callBackend({ action: 'postTimeline', circleId: currentCircle.id, userName: currentUser.name, text: input.value || "#スクショ投稿", images: currentImages, aiComment });
-            input.value = ''; currentImages = []; updatePreview(); updateDataAndUI();
+            await callBackend({ action: 'postTimeline', circleId: currentCircle.id, userName: currentUser.name, text: timelineInput.value || "#スクショ投稿", images: currentImages, aiComment });
+            timelineInput.value = ''; currentImages = []; updatePreview(); postModal.classList.add('hidden'); updateDataAndUI();
         } finally { btn.disabled = false; }
     };
 
-    // Enterキーで投稿
-    timelineInput.onkeydown = (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            document.getElementById('postTimelineBtn').click();
-        }
-    };
+    timelineInput.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); document.getElementById('postTimelineBtn').click(); } };
 
     // --- Drag and Drop / Paste ---
     const timelineCard = document.getElementById('timelineCard');
-    const timelineInput = document.getElementById('timelineInput');
+    timelineCard.onclick = () => document.getElementById('openPostModalBtn').click();
     
-    // 掲示板のどこでもクリックすれば自動で入力モードになり、すぐ貼り付けられるようにする
-    timelineCard.onclick = () => timelineInput.focus();
-
-    timelineCard.ondragover = (e) => { e.preventDefault(); timelineCard.classList.add('drag-over'); };
-    timelineCard.ondragleave = () => timelineCard.classList.remove('drag-over');
-    timelineCard.ondrop = (e) => {
-        e.preventDefault(); timelineCard.classList.remove('drag-over');
-        const files = Array.from(e.dataTransfer.files);
-        files.forEach(f => { if(f.type.startsWith('image/')) { const r = new FileReader(); r.onload = (re) => { if(currentImages.length < 4){ currentImages.push(re.target.result); updatePreview(); } }; r.readAsDataURL(f); } });
-    };
-
     window.addEventListener('paste', async (e) => {
         const items = e.clipboardData.items;
-        const isTimelineFocus = (document.activeElement.id === 'timelineInput');
+        const isModalOpen = !postModal.classList.contains('hidden');
         for (let item of items) {
             if (item.type.indexOf('image') !== -1) {
                 const blob = item.getAsFile();
                 const reader = new FileReader();
                 reader.onload = async (re) => {
-                    const base64 = re.target.result;
-                    if (isTimelineFocus) { if(currentImages.length < 4){ currentImages.push(base64); updatePreview(); showToast("画像を追加しました"); } }
+                    if (isModalOpen) { if(currentImages.length < 4){ currentImages.push(re.target.result); updatePreview(); } }
                     else {
-                        const inc = Math.floor(Math.random() * 500000) + 100000;
-                        const oldM = currentCircle.members[currentUser.id] || { totalFans: 0, targetFans: 3000000 };
-                        await callBackend({ action: 'updateFans', circleId: currentCircle.id, fans: oldM.totalFans + inc });
-                        if (oldM.totalFans < 3000000 && (oldM.totalFans + inc) >= 3000000) launchConfetti();
-                        showToast(`+${(inc/10000).toFixed(1)}万ファン獲得！`); updateDataAndUI();
+                        // Open modal automatically on paste
+                        postModal.classList.remove('hidden');
+                        currentImages = [re.target.result];
+                        updatePreview();
+                        timelineInput.focus();
+                        showToast("画像を添付して投稿画面を開きました");
                     }
                 };
                 reader.readAsDataURL(blob);
@@ -251,15 +246,21 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
     });
 
+    document.getElementById('attachImgBtn').onclick = () => document.getElementById('timelineImageInput').click();
+    document.getElementById('timelineImageInput').onchange = (e) => {
+        const file = e.target.files[0];
+        if (file) { const reader = new FileReader(); reader.onload = (re) => { if(currentImages.length < 4){ currentImages.push(re.target.result); updatePreview(); } }; reader.readAsDataURL(file); }
+    };
+
     // --- Others ---
     document.getElementById('discordLoginBtn').onclick = () => { const r = window.location.origin + window.location.pathname; window.location.href = `https://discord.com/api/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&redirect_uri=${encodeURIComponent(r)}&response_type=token&scope=identify`; };
     document.getElementById('statsBtn').onclick = (e) => { e.preventDefault(); masterStatsOverlay.classList.remove('hidden'); generateAIAnalysis(); };
     document.getElementById('closeStatsBtn').onclick = () => masterStatsOverlay.classList.add('hidden');
     document.getElementById('switchCircleBtn').onclick = showPortal;
     document.getElementById('logoutBtn').onclick = () => window.location.href = window.location.pathname;
-    document.getElementById('adminBtn').onclick = (e) => { e.preventDefault(); const p = prompt('Leader Password:'); if(p === currentCircle.adminPass) { document.getElementById('admin-modal').classList.remove('hidden'); document.getElementById('adminCircleNameInput').value = currentCircle.name; } };
-    document.getElementById('masterAdminBtn').onclick = async (e) => { e.preventDefault(); const p = prompt('Master Pass:'); if(p === 'master') { const db = await callBackend({ action: 'getAllCircles' }); const nk = prompt('Gemini API Key:', db.masterConfig?.aiKey || ''); if(nk !== null) { await callBackend({ action: 'updateMasterConfig', aiKey: nk }); showToast("✅ システム設定保存"); } } };
-    document.getElementById('saveAdminBtn').onclick = async () => { await callBackend({ action: 'updateConfig', circleId: currentCircle.id, name: document.getElementById('adminCircleNameInput').value }); showToast("✅ 保存"); setTimeout(() => document.getElementById('admin-modal').classList.add('hidden'), 1000); updateDataAndUI(); };
+    document.getElementById('adminBtn').onclick = (e) => { e.preventDefault(); const p = prompt('Leader Pass:'); if(p === currentCircle.adminPass) { document.getElementById('admin-modal').classList.remove('hidden'); document.getElementById('adminCircleNameInput').value = currentCircle.name; } };
+    document.getElementById('masterAdminBtn').onclick = async (e) => { e.preventDefault(); if(prompt('Master Pass:')==='master') { const db = await callBackend({ action: 'getAllCircles' }); const nk = prompt('Gemini API Key:', db.masterConfig?.aiKey); if(nk) { await callBackend({ action: 'updateMasterConfig', aiKey: nk }); showToast("✅ 保存"); } } };
+    document.getElementById('saveAdminBtn').onclick = async () => { await callBackend({ action: 'updateConfig', circleId: currentCircle.id, name: document.getElementById('adminCircleNameInput').value }); showToast("✅ 保存"); document.getElementById('admin-modal').classList.add('hidden'); updateDataAndUI(); };
     function launchConfetti() { for(let i=0;i<60;i++) { const c=document.createElement('div'); c.className='confetti'; c.style.left=Math.random()*100+'vw'; c.style.backgroundColor=['#fba1ba','#e0c384','#fff'][Math.floor(Math.random()*3)]; c.style.animationDelay=Math.random()*2+'s'; document.body.appendChild(c); setTimeout(()=>c.remove(),4000); } }
     function showToast(m, t='success'){ const s=document.getElementById('toast'); s.textContent=m; s.className=`toast show ${t}`; setTimeout(()=>s.classList.remove('show'),3000); }
     async function updateDataAndUI(){ const res=await callBackend({action:'getCircleData', circleId:currentCircle.id}); currentCircle=res.circle; updateDashboard(); }

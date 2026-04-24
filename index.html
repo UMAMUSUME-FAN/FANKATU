@@ -111,23 +111,18 @@
             </div>
 
             <!-- Community Timeline (Uma Style) -->
-            <div class="side-card glass-panel" id="timelineCard" style="grid-column: 1/2; grid-row: 2/4;">
+            <div class="side-card glass-panel" id="timelineCard" style="grid-column: 1/2; grid-row: 2/4; display:flex; flex-direction:column;">
                 <div class="card-header">
-                    <h3>Trainers' Paddock</h3>
-                    <p>育成の秘訣やレース対策の共有。AIがサークルの『記憶』として継承・蓄積します。</p>
-                </div>
-                <div style="display:flex; flex-direction:column; gap:10px; margin-bottom:20px;">
-                    <div style="display:flex; gap:10px;">
-                        <input type="text" id="timelineInput" class="glass-input" placeholder="今の育成状況や『継承』のコツは？ 例: 逃げウマにはスタミナ1200必須...">
-                        <input type="file" id="timelineImageInput" style="display:none;" accept="image/*">
-                        <button id="attachImgBtn" class="glass-btn" style="background:rgba(0,0,0,0.05); padding:10px;"><span class="material-icons-outlined">image</span></button>
-                        <button id="postTimelineBtn" class="glass-btn primary"><span class="material-icons-outlined">send</span></button>
+                    <div>
+                        <h3 style="display:inline-block; margin-right:10px;">Trainers' Paddock</h3>
+                        <span class="tag">Live</span>
                     </div>
-                <div id="timelineImagePreview" style="display:none; flex-wrap:wrap; gap:10px; padding:10px; background:rgba(0,0,0,0.03); border-radius:15px; margin-top:10px;">
-                    <!-- Multiple previews will span here -->
+                    <button id="openPostModalBtn" class="glass-btn primary" style="padding: 8px 15px; font-size:12px;">
+                        <span class="material-icons-outlined" style="font-size:18px; margin-right:5px;">edit_note</span> 投稿する
+                    </button>
                 </div>
-                </div>
-                <div id="timelineList" class="scroll-list" style="height:400px; display:flex; flex-direction:column; gap:15px;">
+                
+                <div id="timelineList" class="scroll-list" style="flex:1; display:flex; flex-direction:column; gap:15px; margin-top:10px;">
                     <!-- Timeline posts here -->
                 </div>
             </div>
@@ -185,6 +180,30 @@
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Post Modal -->
+    <div id="post-modal" class="modal-overlay hidden">
+        <div class="glass-panel" style="width:500px; padding:30px;">
+            <div class="modal-header">
+                <h3><span class="material-icons-outlined">paddock</span> Post to Paddock</h3>
+                <span id="closePostModal" class="material-icons-outlined" style="cursor:pointer;">close</span>
+            </div>
+            <textarea id="timelineInput" class="glass-input" style="height:120px; resize:none; margin-bottom:15px;" placeholder="今の育成状況や『継承』のコツを全国に共有しましょう..."></textarea>
+            
+            <div id="timelineImagePreview" style="display:none; flex-wrap:wrap; gap:10px; padding:10px; background:rgba(0,0,0,0.03); border-radius:15px; margin-bottom:15px;"></div>
+            
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+                <div style="display:flex; gap:10px;">
+                    <input type="file" id="timelineImageInput" style="display:none;" accept="image/*">
+                    <button id="attachImgBtn" class="glass-btn" style="background:rgba(0,0,0,0.05); padding:10px;"><span class="material-icons-outlined">image</span></button>
+                </div>
+                <button id="postTimelineBtn" class="glass-btn primary" style="padding:10px 30px;">
+                    <span class="material-icons-outlined" style="margin-right:8px;">send</span> 送信
+                </button>
+            </div>
+            <p style="font-size:11px; color:var(--text-muted); margin-top:15px;">※画像は最大4枚まで、Ctrl+Vで貼り付け可能です。</p>
         </div>
     </div>
 

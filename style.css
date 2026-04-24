@@ -106,7 +106,22 @@ body {
 .glass-input:focus { border-color: var(--primary); box-shadow: 0 0 0 4px rgba(251, 161, 186, 0.1); }
 .glass-btn { border: none; border-radius: 15px; font-weight: 700; cursor: pointer; transition: 0.3s; display: flex; align-items: center; justify-content: center; transform: perspective(1px) translateZ(0); }
 .glass-btn:active { transform: scale(0.95); }
-.glass-btn.primary { background: var(--primary); color: white; box-shadow: 0 5px 15px rgba(251, 161, 186, 0.3); }
+.glass-btn.primary { 
+    background: var(--primary); 
+    color: white; 
+    box-shadow: 0 5px 15px rgba(251, 161, 186, 0.3);
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+.glass-btn.primary:hover {
+    transform: scale(1.1) translateY(-2px);
+    box-shadow: 0 8px 20px rgba(251, 161, 186, 0.5);
+    filter: brightness(1.05);
+}
+.glass-btn.primary:active {
+    transform: scale(0.92);
+}
+
 .text-link { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 13px; display: flex; align-items: center; gap: 5px; }
 .text-link:hover { color: var(--text-dark); }
 
