@@ -25,8 +25,7 @@ async function callBackend(p) {
         });
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const result = await response.json();
-        if (result.success) return result.db;
-        return null;
+        return (result && result.success) ? result.db : null;
     } catch (e) {
         console.error("Backend Error:", e);
         return null;
@@ -47,9 +46,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     const portalOverlay = document.getElementById('circleSelectionOverlay');
     const appWrapper = document.getElementById('appWrapper');
     
+    // Auth Check
     const params = new URLSearchParams(window.location.hash.substring(1));
     const token = params.get('access_token');
-    
     if (token) {
         window.history.replaceState({}, document.title, window.location.pathname);
         try {
@@ -57,15 +56,14 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (!userRes.ok) throw new Error();
             const du = await userRes.json();
             currentUser = { id: du.id, name: du.username, avatar: `https://cdn.discordapp.com/avatars/${du.id}/${du.avatar}.png` };
-            if(authOverlay) authOverlay.classList.add('hidden');
+            if (authOverlay) authOverlay.classList.add('hidden');
             showPortal();
         } catch(e) { 
             showToast("ログイン失敗", "error");
-            if(authOverlay) authOverlay.classList.add('hidden');
-            showPortal();
         }
     }
 
+    // --- Portal Logic ---
     async function showPortal() {
         if(!portalOverlay) return;
         portalOverlay.classList.remove('hidden');
@@ -75,57 +73,67 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         
         // Logout
-        document.getElementById('logoutBtn').onclick = () => {
-            window.location.href = window.location.origin + window.location.pathname;
-        };
+        const logoutBtn = document.getElementById('logoutBtnFromPortal');
+        if(logoutBtn) logoutBtn.onclick = () => window.location.reload();
 
-        // Create
-        const createBtn = document.getElementById('createNewCircleBtn');
-        createBtn.onclick = async () => {
-            const name = prompt("サークル名を入力:");
-            if (name) {
+        // Create Circle Modal
+        const showCreateBtn = document.getElementById('showCreateCircleBtn');
+        const createModal = document.getElementById('create-circle-modal');
+        if(showCreateBtn && createModal) {
+            showCreateBtn.onclick = () => createModal.classList.remove('hidden');
+            document.getElementById('cancelCreateCircle').onclick = () => createModal.classList.add('hidden');
+            document.getElementById('confirmCreateCircle').onclick = async () => {
+                const nameInput = document.getElementById('newCircleName');
+                if(!nameInput.value) return;
                 try {
-                    createBtn.disabled = true; showToast("サークルを作成中...");
-                    const db = await callBackend({ action: 'createCircle', name: name });
-                    if (db && db.lastCreatedId) {
-                        showToast(`設立完了！`);
+                    showToast("サークルを設立中...");
+                    const db = await callBackend({ action: 'createCircle', name: nameInput.value });
+                    if(db && db.lastCreatedId) {
+                        createModal.classList.add('hidden');
+                        nameInput.value = '';
                         await renderPortalCircles();
                         loginToCircle(db.lastCreatedId);
-                    } else {
-                        showToast("サーバーエラー（GASの容量不足の可能性があります）", "error");
-                    }
-                } catch(e) { showToast("作成失敗", "error"); }
-                finally { createBtn.disabled = false; }
-            }
-        };
+                    } else { throw new Error(); }
+                } catch(e) { showToast("作成に失敗しました", "error"); }
+            };
+        }
         renderPortalCircles();
     }
 
     async function renderPortalCircles() {
         const db = await callBackend({ action: 'getAllCircles' });
         const myList = document.getElementById('myCirclesList');
-        const resultsList = document.getElementById('searchResultsList');
-        if(!myList || !resultsList) return;
-        myList.innerHTML = ''; resultsList.innerHTML = '';
-        if(!db) { myList.innerHTML = "<p style='font-size:10px; opacity:0.5;'>サーバー接続不可...</p>"; return; }
+        const resList = document.getElementById('searchResultsList');
+        if(!myList || !resList) return;
+        myList.innerHTML = ''; resList.innerHTML = '';
+        
+        if(!db) { myList.innerHTML = "<p style='font-size:10px; opacity:0.5;'>オフライン中...</p>"; return; }
         
         const myIds = db.userToCircles[currentUser?.id] || [];
         myIds.forEach(cid => {
             const c = db.circles[cid]; if(!c) return;
-            const div = document.createElement('div'); div.className = 'glass-btn'; div.style.marginBottom = '10px';
-            div.innerHTML = `<span>${c.name}</span> <span class="tag" style="float:right; background:var(--primary); color:white;">入室</span>`;
-            div.onclick = () => loginToCircle(cid); myList.appendChild(div);
+            const div = document.createElement('div'); 
+            div.className = 'glass-btn'; div.style = "margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; padding-right:5px;";
+            div.innerHTML = `
+                <div style="flex:1; cursor:pointer;" onclick="window.loginToCircle('${cid}')">
+                    <span style="font-size:12px; font-weight:bold;">${c.name}</span>
+                    <span class="tag" style="background:var(--primary); color:white; font-size:9px; vertical-align:middle; margin-left:5px;">入室</span>
+                </div>
+                <button class="text-link" style="color:var(--text-muted); font-size:10px;" onclick="event.stopPropagation(); window.leaveCircle('${cid}', '${c.name}')">× 脱退</button>
+            `;
+            myList.appendChild(div);
         });
-        
+
         Object.values(db.circles).forEach(c => {
-            if (myIds.includes(c.id)) return;
-            const div = document.createElement('div'); div.className = 'glass-btn'; div.style.marginBottom = '10px';
-            div.innerHTML = `<span>${c.name}</span> <span class="tag" style="float:right;">参加申請</span>`;
-            div.onclick = () => showToast("現在締め切り中です"); resultsList.appendChild(div);
+            if(myIds.includes(c.id)) return;
+            const div = document.createElement('div'); div.className = 'glass-btn'; div.style = "margin-bottom:10px; display:flex; justify-content:space-between; align-items:center;";
+            div.innerHTML = `<span>${c.name}</span> <button class="tag-btn" onclick="window.joinCircle('${c.id}', '${c.name}')">参加申請</button>`;
+            resList.appendChild(div);
         });
     }
 
-    async function loginToCircle(cid) {
+    // --- Global Actions for onClick ---
+    window.loginToCircle = async (cid) => {
         const db = await callBackend({ action: 'getCircleData', circleId: cid });
         if (db && db.circles[cid]) {
             currentCircle = db.circles[cid];
@@ -135,7 +143,22 @@ document.addEventListener('DOMContentLoaded', async () => {
             if(currentUser?.avatar) document.getElementById('userAvatar').style.backgroundImage = `url('${currentUser.avatar}')`;
             await updateDataAndUI();
         }
-    }
+    };
+
+    window.leaveCircle = async (cid, name) => {
+        if(confirm(`『${name}』から脱退（または申請取り消し）しますか？`)) {
+            // GAS側でも対応が必要ですが、今のDB構造ならとりあえず簡易的に再構成
+            await callBackend({ action: 'leaveCircle', circleId: cid });
+            showToast("脱退しました");
+            renderPortalCircles();
+        }
+    };
+
+    window.joinCircle = async (cid, name) => {
+        showToast("サークルに加入しました！");
+        await callBackend({ action: 'joinCircle', circleId: cid });
+        renderPortalCircles();
+    };
 
     async function updateDataAndUI() {
         const db = await callBackend({ action: 'getCircleData', circleId: currentCircle?.id });
@@ -195,6 +218,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // --- Events ---
     document.getElementById('adminBtn').onclick = (e) => { e.preventDefault(); document.getElementById('admin-modal').classList.remove('hidden'); renderAdminMembers(); };
     document.getElementById('closeAdmin').onclick = () => document.getElementById('admin-modal').classList.add('hidden');
+    document.getElementById('switchCircleBtn').onclick = () => { appWrapper.style.display = 'none'; showPortal(); };
 
     window.renderAdminMembers = () => {
         const list = document.getElementById('adminMemberList'); if(!list || !currentCircle) return;
