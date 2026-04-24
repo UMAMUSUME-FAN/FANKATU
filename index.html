@@ -25,6 +25,35 @@
         </div>
     </div>
 
+    <!-- Circle Selection Overlay (サークル選択) -->
+    <div id="circleSelectionOverlay" class="auth-overlay hidden">
+        <div class="auth-card" style="max-width: 500px; padding: 40px;">
+            <h2 style="font-family:'Playfair Display', serif; margin-bottom:10px;">Select Circle</h2>
+            <p style="color:#9d8e90; font-size:14px; margin-bottom:30px;">所属するサークルを選択するか、新しく作成してください</p>
+            
+            <div id="circleList" style="display:flex; flex-direction:column; gap:10px; margin-bottom:15px; max-height:160px; overflow-y:auto; padding-right:5px;">
+                <!-- JS injects circles here -->
+            </div>
+
+            <div style="border-top: 1px solid #eee; padding-top: 15px; margin-bottom: 15px;">
+                <p style="font-size:12px; font-weight:bold; color:var(--text-dark); margin-bottom:8px;">サークルを探して参加する</p>
+                <div style="display:flex; gap:8px;">
+                    <input type="text" id="searchCircleName" class="glass-input" placeholder="サークル名を検索" style="padding:10px;">
+                    <button id="searchCircleBtn" class="glass-btn primary" style="padding:10px 15px;"><span class="material-icons-outlined">search</span></button>
+                </div>
+                <div id="searchResults" style="margin-top:10px; display:flex; flex-direction:column; gap:8px;"></div>
+            </div>
+
+            <div style="border-top: 1px solid #eee; padding-top: 15px;">
+                <p style="font-size:12px; font-weight:bold; color:var(--text-dark); margin-bottom:8px;">新しく作成する</p>
+                <input type="text" id="newCircleName" class="glass-input" placeholder="新しいサークル名" style="margin-bottom:10px;">
+                <button id="createCircleBtn" class="glass-btn primary" style="width:100%; background:linear-gradient(45deg, #e0c384, #fba1ba);">サークルを作成する</button>
+            </div>
+            
+            <button id="circleLogoutBtn" style="background:transparent; border:none; color:#bbb; margin-top:20px; cursor:pointer; font-size:12px;">ログアウト</button>
+        </div>
+    </div>
+
     <!-- Main App Layout (サムネイル風) -->
     <div class="app-layout" id="appWrapper" style="display:none;">
         
@@ -58,11 +87,14 @@
                 <span class="material-icons-outlined nav-symbol" data-target="statsCard" title="Stats">bar_chart</span>
                 <span class="material-icons-outlined nav-symbol" data-target="membersCard" title="Members">group</span>
                 <span class="material-icons-outlined nav-symbol" data-target="dropzone" title="Upload">cloud_upload</span>
+                <div style="border-top:1px solid #eee; margin:10px 0; width:30px;"></div>
+                <span class="material-icons-outlined" id="switchCircleBtn" title="サークルを切り替える" style="cursor:pointer; color:var(--text-muted);">swap_horiz</span>
             </div>
 
             <!-- Center Panel (Hero) -->
             <div class="hero-card glass-panel" id="heroCard">
-                <div class="hero-top">
+                <div class="hero-top" style="display:flex; justify-content:space-between; width:100%; align-items:center;">
+                    <span class="tag circle-name-display" style="color:var(--primary); font-weight:700;">Circle Name</span>
                     <span class="tag">‘Uma Musume’</span>
                 </div>
                 <h1 class="hero-giant-title">My<br>Fan Quota</h1>
@@ -99,7 +131,6 @@
                 </div>
             </div>
 
-            <!-- Right Column Middle (Members) -->
             <div class="side-card glass-panel members-panel" id="membersCard">
                 <div class="card-header">
                     <h3>Circle Members</h3>
@@ -107,6 +138,17 @@
                 </div>
                 <div class="members-grid-mini" id="membersGrid">
                     <!-- JS injects members here -->
+                </div>
+            </div>
+
+            <!-- Circle Ranking Panel (New) -->
+            <div class="side-card glass-panel ranking-panel" id="rankingCard">
+                <div class="card-header">
+                    <h3 style="display:flex; align-items:center; gap:8px;"><span class="material-icons-outlined" style="color:#e0c384;">emoji_events</span>Nationwide Ranking</h3>
+                    <p>他の全サークルとのファン数比較</p>
+                </div>
+                <div id="circleRankingList" style="display:flex; flex-direction:column; gap:10px; margin-top:10px;">
+                    <!-- JS injects rankings here -->
                 </div>
             </div>
 
@@ -138,6 +180,13 @@
             </div>
 
             <div style="margin-bottom: 20px;">
+                <label style="font-size:14px; font-weight:bold; color:var(--text-muted);">所属申請の管理 (承認待ち)</label>
+                <div id="adminJoinRequests" style="max-height: 120px; overflow-y: auto; background: rgba(251, 161, 186, 0.05); padding: 15px; border-radius: 10px; margin-top:5px; border: 1px dashed var(--primary);">
+                    <!-- JS injects requests here -->
+                </div>
+            </div>
+
+            <div style="margin-bottom: 20px;">
                 <label style="font-size:14px; font-weight:bold; color:var(--text-muted);">個別の目標ファン数設定</label>
                 <div id="adminMemberList" style="max-height: 180px; overflow-y: auto; background: rgba(0,0,0,0.03); padding: 15px; border-radius: 10px; margin-top:5px;">
                     <!-- JS injects checkboxes -->
@@ -161,6 +210,16 @@
             </div>
 
             <div style="margin-bottom: 20px; border-top: 1px solid rgba(0,0,0,0.1); padding-top: 20px;">
+                <label style="font-size:14px; font-weight:bold; color:var(--text-muted);">サークル名の変更</label>
+                <input type="text" id="adminCircleNameInput" class="glass-input" style="margin-top:5px;" placeholder="サークル名を入力">
+            </div>
+
+            <div style="margin-bottom: 20px;">
+                <label style="font-size:14px; font-weight:bold; color:var(--text-muted);">管理者IDの変更</label>
+                <input type="text" id="adminIdInput" class="glass-input" style="margin-top:5px;" placeholder="新しい管理者ID">
+            </div>
+
+            <div style="margin-bottom: 20px;">
                 <label style="font-size:14px; font-weight:bold; color:var(--text-muted);">管理者パスワードの変更</label>
                 <input type="text" id="adminPassInput" class="glass-input" style="margin-top:5px;" placeholder="新しいパスワード（空欄の場合は変更なし）">
             </div>

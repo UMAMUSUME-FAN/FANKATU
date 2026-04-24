@@ -1,7 +1,9 @@
 const GAS_ENDPOINT = ''; 
 const DB_KEY = 'uma_mock_db';
 let currentUser = null;
+let currentCircle = null; // 現在選択中のサークル情報
 let activeDrawerMemberId = null;
+let isAdminLogin = false;
 
 document.addEventListener('DOMContentLoaded', () => {
     const authOverlay = document.getElementById('authOverlay');
@@ -69,20 +71,109 @@ document.addEventListener('DOMContentLoaded', () => {
         window.location.href = authUrl;
     };
 
-    document.getElementById('logoutBtn').onclick = () => {
-        localStorage.removeItem('uma_current_user'); currentUser = null;
-        appWrapper.style.display = 'none'; authOverlay.classList.remove('hidden');
+    document.getElementById('logoutBtn').onclick = () => { logout(); };
+    document.getElementById('circleLogoutBtn').onclick = () => { logout(); };
+
+    function logout() {
+        localStorage.removeItem('uma_current_user'); 
+        currentUser = null; currentCircle = null; isAdminLogin = false;
+        appWrapper.style.display = 'none'; 
+        document.getElementById('circleSelectionOverlay').classList.add('hidden');
+        authOverlay.classList.remove('hidden');
+    }
+
+    async function loginSuccess() {
+        authOverlay.classList.add('hidden');
+        
+        // 所属サークルチェック
+        const res = await callBackend({ action: 'get_user_circles', memberId: currentUser.memberId });
+        if (res.circles && res.circles.length > 0) {
+            showCircleSelection(res.circles);
+        } else {
+            // どこにも所属していない場合はサークル作成/参加画面へ
+            showCircleSelection([]);
+        }
+    }
+
+    // サークル選択画面の表示
+    function showCircleSelection(circles) {
+        const overlay = document.getElementById('circleSelectionOverlay');
+        const list = document.getElementById('circleList');
+        overlay.classList.remove('hidden');
+        list.innerHTML = '';
+
+        if (circles.length === 0) {
+            list.innerHTML = '<p style="font-size:12px; color:#bbb; text-align:center;">所属しているサークルがありません</p>';
+        }
+
+        circles.forEach(c => {
+            const btn = document.createElement('button');
+            btn.className = 'glass-btn';
+            btn.style.width = '100%';
+            btn.style.textAlign = 'left';
+            btn.style.marginBottom = '8px';
+            btn.innerHTML = `<span class="material-icons-outlined" style="font-size:16px; vertical-align:middle; margin-right:8px;">group</span>${c.name}`;
+            btn.onclick = () => selectCircle(c.id);
+            list.appendChild(btn);
+        });
+    }
+
+    // サークル検索
+    document.getElementById('searchCircleBtn').onclick = async () => {
+        const query = document.getElementById('searchCircleName').value;
+        if (!query) return;
+        const res = await callBackend({ action: 'search_circles', query: query });
+        const resultsDiv = document.getElementById('searchResults');
+        resultsDiv.innerHTML = '';
+        if (res.results.length === 0) {
+            resultsDiv.innerHTML = '<p style="font-size:12px; color:#bbb; text-align:center;">見つかりませんでした</p>';
+        }
+        res.results.forEach(c => {
+            const row = document.createElement('div');
+            row.style.display = 'flex'; row.style.justifyContent = 'space-between'; row.style.alignItems = 'center';
+            row.style.background = 'rgba(0,0,0,0.03)'; row.style.padding = '8px 12px'; row.style.borderRadius = '10px';
+            row.innerHTML = `<span style="font-size:13px; font-weight:600;">${c.name}</span> <button class="glass-btn primary" style="padding:4px 10px; font-size:11px;">所属する</button>`;
+            row.querySelector('button').onclick = () => selectCircle(c.id);
+            resultsDiv.appendChild(row);
+        });
     };
 
-    function loginSuccess() {
-        authOverlay.classList.add('hidden');
-        appWrapper.style.display = 'flex';
-        const ua = document.getElementById('userAvatar');
-        if (currentUser.icon) { ua.style.backgroundImage = `url('${currentUser.icon}')`; ua.textContent = ''; }
-        else ua.textContent = currentUser.name.charAt(0);
-        
-        window.currentChartMode = 'personal'; // 初回表示は自分
-        refreshDashboard();
+    // サークル作成
+    document.getElementById('createCircleBtn').onclick = async () => {
+        const name = document.getElementById('newCircleName').value;
+        if (!name) return alert('サークル名を入力してください');
+        const res = await callBackend({ action: 'create_circle', name: name, ownerId: currentUser.memberId });
+        if (res.success) {
+            document.getElementById('newCircleName').value = '';
+            selectCircle(res.circleId);
+        }
+    };
+
+    // サークル切り替え
+    document.getElementById('switchCircleBtn').onclick = () => {
+        isAdminLogin = false;
+        appWrapper.style.display = 'none';
+        loginSuccess();
+    };
+
+    async function selectCircle(circleId) {
+        const res = await callBackend({ action: 'select_circle', circleId: circleId, memberId: currentUser.memberId });
+        if (res.pending) {
+            alert('サークルリーダーに所属申請を送りました！承認されるまでお待ちください。');
+            return;
+        }
+        if (res.success) {
+            currentCircle = res.circle;
+            document.getElementById('circleSelectionOverlay').classList.add('hidden');
+            appWrapper.style.display = 'flex';
+            
+            const ua = document.getElementById('userAvatar');
+            if (currentUser.icon) { ua.style.backgroundImage = `url('${currentUser.icon}')`; ua.textContent = ''; }
+            else ua.textContent = currentUser.name.charAt(0);
+            
+            window.currentChartMode = 'personal';
+            refreshDashboard();
+        }
     }
 
     const avUpload = document.getElementById('myAvatarUpload');
@@ -122,19 +213,41 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // ② 管理者ボタンにパスワード認証を搭載
     document.getElementById('adminBtn').onclick = async () => {
-        const res = await callBackend({ action: 'get_db' });
+        const res = await callBackend({ action: 'get_db', circleId: currentCircle.id });
         
-        // 管理者パスワード入力画面 (初期パスワードは admin)
+        // 管理者認証
+        const currentAdminId = res.db.adminId || 'admin';
         const currentAdminPass = res.db.adminPass || 'admin';
-        const entered = prompt('管理者パスワードを入力してください (初期設定: admin)');
-        if (entered !== currentAdminPass) {
-            alert('パスワードが違います！');
-            return;
-        }
+        
+        const enteredId = prompt('管理者IDを入力してください');
+        if (enteredId !== currentAdminId) return alert('IDが違います！');
+        
+        const enteredPass = prompt('管理者パスワードを入力してください');
+        if (enteredPass !== currentAdminPass) return alert('パスワードが違います！');
 
-        window.isAdminLogin = true;
-        refreshDashboard(); // 管理者ビュー（全員重ね合わせグラフなど）に切り替え
+        isAdminLogin = true;
+        refreshDashboard(); 
 
+        // 申請リストの描画
+        const reqList = document.getElementById('adminJoinRequests');
+        reqList.innerHTML = '';
+        const requests = res.db.joinRequests || [];
+        if (requests.length === 0) reqList.innerHTML = '<p style="font-size:11px; color:#bbb; text-align:center;">現在、待機中の申請はありません</p>';
+        requests.forEach(r => {
+            const div = document.createElement('div');
+            div.style.display = 'flex'; div.style.justifyContent = 'space-between'; div.style.alignItems = 'center'; div.style.marginBottom = '5px';
+            div.innerHTML = `
+                <span style="font-size:12px;">${r.name}</span>
+                <div>
+                    <button onclick="window.handleRequest('${r.memberId}', true)" style="background:#2ed573; color:white; border:none; padding:3px 8px; border-radius:5px; cursor:pointer; font-size:10px;">許可</button>
+                    <button onclick="window.handleRequest('${r.memberId}', false)" style="background:#ff4757; color:white; border:none; padding:3px 8px; border-radius:5px; cursor:pointer; font-size:10px;">拒否</button>
+                </div>
+            `;
+            reqList.appendChild(div);
+        });
+
+        document.getElementById('adminCircleNameInput').value = currentCircle.name;
+        document.getElementById('adminIdInput').value = currentAdminId;
         document.getElementById('adminTotalTarget').value = res.db.totalTarget || 100000000;
         document.getElementById('adminDiscordWebhook').value = res.db.discordWebhook || '';
         document.getElementById('adminPassInput').value = '';
@@ -161,6 +274,12 @@ document.addEventListener('DOMContentLoaded', () => {
         adminModal.classList.remove('hidden');
     };
 
+    // 管理者用: 申請の処理
+    window.handleRequest = async (memberId, accept) => {
+        await callBackend({ action: 'handle_join_request', circleId: currentCircle.id, applicantId: memberId, accept: accept });
+        document.getElementById('adminBtn').click(); // リスト更新
+    };
+
     // グローバル関数: アカウント凍結切り替え
     window.toggleFreeze = async (memberId) => {
         await callBackend({ action: 'toggle_freeze', memberId: memberId });
@@ -182,8 +301,12 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('saveAdminBtn').onclick = async () => {
         const payload = {
             action: 'save_admin',
+            circleId: currentCircle.id,
+            name: document.getElementById('adminCircleNameInput').value,
             totalTarget: parseInt(document.getElementById('adminTotalTarget').value),
             discordWebhook: document.getElementById('adminDiscordWebhook').value,
+            adminId: document.getElementById('adminIdInput').value,
+            adminPass: document.getElementById('adminPassInput').value,
             individualTargets: {}
         };
         document.querySelectorAll('.ind-target-display').forEach(disp => {
@@ -218,7 +341,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <p style="font-size:16px; font-weight:bold; color:var(--primary); animation: pulse 1.5s infinite;">解析中...</p>
             `;
 
-            const res = await callBackend({ action: 'upload', memberId: currentUser.memberId, image: reader.result });
+            const res = await callBackend({ action: 'upload', memberId: currentUser.memberId, circleId: currentCircle.id, image: reader.result });
             if (res.success) {
                 // Discord Webhook (もし設定されていれば)
                 if (window.discordWebhookUrl) {
@@ -229,7 +352,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     let isDanger = false;
                     
                     if (d >= 15 && d <= 20) {
-                        const dbRef = await callBackend({ action: 'get_db' });
+                        const dbRef = await callBackend({ action: 'get_db', circleId: currentCircle.id });
                         const myTarget = dbRef.db.individualTargets[currentUser.memberId] || 3000000;
                         const myCurrent = dbRef.db.fans[currentUser.memberId] || 0;
                         
@@ -279,12 +402,42 @@ document.addEventListener('DOMContentLoaded', () => {
         reader.readAsDataURL(file);
     }
 
+    async function refreshRanking() {
+        const res = await callBackend({ action: 'get_ranking' });
+        const list = document.getElementById('circleRankingList');
+        if (!list) return;
+        list.innerHTML = '';
+        
+        res.ranking.forEach((c, idx) => {
+            const row = document.createElement('div');
+            row.style.display = 'flex'; row.style.justifyContent = 'space-between'; row.style.padding = '10px 12px';
+            row.style.background = (currentCircle && c.id === currentCircle.id) ? 'rgba(251, 161, 186, 0.15)' : 'rgba(255,255,255,0.5)';
+            row.style.borderRadius = '12px';
+            row.style.border = (currentCircle && c.id === currentCircle.id) ? '1px solid var(--primary)' : '1px solid #eee';
+            row.innerHTML = `
+                <div style="display:flex; align-items:center; gap:12px;">
+                    <span style="font-weight:bold; color:var(--text-dark); width:20px; text-align:center;">${idx + 1}</span>
+                    <span style="font-size:14px; font-weight:600;">${c.name}</span>
+                </div>
+                <span style="font-size:13px; font-weight:bold; color:var(--primary);">${(c.totalFans/10000).toFixed(1)}万</span>
+            `;
+            list.appendChild(row);
+        });
+    }
+
     // --- Dashboard Refresh ---
     async function refreshDashboard() {
-        const res = await callBackend({ action: 'get_db' });
+        if (!currentCircle) return;
+        const res = await callBackend({ action: 'get_db', circleId: currentCircle.id });
         const db = res.db;
+        currentCircle.name = db.name; // 最新の名前に更新
         window.discordWebhookUrl = db.discordWebhook || '';
+
+        // UIにサークル名を反映
+        document.querySelectorAll('.circle-name-display').forEach(el => el.textContent = db.name);
         
+        refreshRanking();
+
         // --- mixi風の自分のマイページデータ表示 ---
         const myFans = db.fans[currentUser.memberId] || 0;
         const myTarget = db.individualTargets[currentUser.memberId] || 3000000;
@@ -315,7 +468,7 @@ document.addEventListener('DOMContentLoaded', () => {
             drawMyChart(myFans);
         } else {
             cTitle.textContent = "Circle Growth";
-            if (window.isAdminLogin) {
+            if (isAdminLogin) {
                 cDesc.textContent = "サークル全員の推移（管理者ビュー）";
                 toggleBtn.textContent = "個人の推移を表示";
                 drawAdminOverlayChart(db);
@@ -332,7 +485,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // 管理者モードの場合、ファン数が多い順にソート（管理者のみの特典）
         let sortedMembers = [...db.members];
-        if (window.isAdminLogin) {
+        if (isAdminLogin) {
             sortedMembers.sort((a, b) => (db.fans[b.memberId] || 0) - (db.fans[a.memberId] || 0));
         }
 
@@ -345,7 +498,7 @@ document.addEventListener('DOMContentLoaded', () => {
             else mdiv.innerHTML = m.name.charAt(0);
 
             // ✨ 管理者のみ、目標達成度・獲得量に応じた「赤い縁（オーラ）」の演出が見える
-            if (window.isAdminLogin) {
+            if (isAdminLogin) {
                 const myCurrent = db.fans[m.memberId] || 0;
                 const myTarget = db.individualTargets[m.memberId] || 3000000;
                 const progressRatio = Math.min(1, Math.max(0, myCurrent / myTarget)); // 0.0〜1.0
@@ -360,7 +513,7 @@ document.addEventListener('DOMContentLoaded', () => {
             
             mdiv.onclick = () => {
                 // 自分自身か、管理者ログイン状態の時のみ詳細画面を開ける
-                if (!window.isAdminLogin && m.memberId !== currentUser.memberId) {
+                if (!isAdminLogin && m.memberId !== currentUser.memberId) {
                     alert('プライバシー保護のため、他のメンバーの詳細データは管理者のみ閲覧可能です。（※自分のデータは見ることができます）');
                     return;
                 }
@@ -527,46 +680,116 @@ document.addEventListener('DOMContentLoaded', () => {
         if (GAS_ENDPOINT) { const r = await fetch(GAS_ENDPOINT, { method: 'POST', body: JSON.stringify(data) }); return await r.json(); }
         return new Promise(res => {
             setTimeout(() => {
-                let db = JSON.parse(localStorage.getItem(DB_KEY) || '{"members":[], "fans":{}, "individualTargets":{}, "totalTarget":100000000}');
+                // 完全マルチ対応DB構造: { circles: { id: { ... } }, userToCircles: { userId: [ids] } }
+                let db = JSON.parse(localStorage.getItem(DB_KEY) || '{"circles":{}, "userToCircles":{}}');
                 
-                // --- 月初めの全ファン数自動リセット機能 ---
-                const currentMonth = new Date().getMonth() + 1;
-                if (db.lastResetMonth && db.lastResetMonth !== currentMonth) {
-                    db.fans = {}; // 全員の獲得ファン数をゼロに
-                }
-                db.lastResetMonth = currentMonth;
-                localStorage.setItem(DB_KEY, JSON.stringify(db)); // 判定後上書き保存
                 if (data.action === 'discord_login') {
-                    let m = db.members.find(x => x.memberId === data.memberId);
-                    if (!m) {
-                        m = { memberId: data.memberId, name: data.name, icon: data.icon };
-                        db.members.push(m);
+                    // ユーザー情報の保存（ここではサークル所属とは別）
+                    res({ success: true });
+                }
+                else if (data.action === 'get_user_circles') {
+                    const circleIds = db.userToCircles[data.memberId] || [];
+                    const myCircles = circleIds.map(id => ({ id: id, name: db.circles[id] ? db.circles[id].name : 'Unknown' }));
+                    res({ success: true, circles: myCircles.filter(c => c.name !== 'Unknown') });
+                }
+                else if (data.action === 'search_circles') {
+                    const query = data.query.toLowerCase();
+                    const results = Object.keys(db.circles)
+                        .filter(id => db.circles[id].name.toLowerCase().includes(query))
+                        .map(id => ({ id: id, name: db.circles[id].name }));
+                    res({ success: true, results: results });
+                }
+                else if (data.action === 'create_circle') {
+                    const cid = 'C' + Date.now();
+                    db.circles[cid] = {
+                        name: data.name,
+                        members: [{ memberId: data.ownerId, name: currentUser.name, icon: currentUser.icon }],
+                        fans: {},
+                        individualTargets: {},
+                        totalTarget: 100000000,
+                        lastResetMonth: new Date().getMonth() + 1,
+                        adminId: 'admin',
+                        adminPass: 'admin',
+                        discordWebhook: ''
+                    };
+                    if (!db.userToCircles[data.ownerId]) db.userToCircles[data.ownerId] = [];
+                    db.userToCircles[data.ownerId].push(cid);
+                    localStorage.setItem(DB_KEY, JSON.stringify(db));
+                    res({ success: true, circleId: cid });
+                }
+                else if (data.action === 'select_circle') {
+                    const c = db.circles[data.circleId];
+                    if (!c) return res({ success: false });
+
+                    const isMember = c.members.find(m => m.memberId === data.memberId);
+                    if (isMember) {
+                        res({ success: true, circle: { id: data.circleId, name: c.name } });
                     } else {
-                        m.name = data.name;
-                        if (!m.icon || data.icon) m.icon = data.icon; 
+                        // 所属していない場合は「申請」を出す
+                        c.joinRequests = c.joinRequests || [];
+                        if (!c.joinRequests.find(r => r.memberId === data.memberId)) {
+                            c.joinRequests.push({ memberId: data.memberId, name: currentUser.name });
+                        }
+                        localStorage.setItem(DB_KEY, JSON.stringify(db));
+                        res({ success: true, pending: true });
+                    }
+                }
+                else if (data.action === 'handle_join_request') {
+                    const c = db.circles[data.circleId];
+                    c.joinRequests = (c.joinRequests || []).filter(r => r.memberId !== data.applicantId);
+                    if (data.accept) {
+                        if (!c.members.find(m => m.memberId === data.applicantId)) {
+                            c.members.push({ memberId: data.applicantId, name: currentUser.name, icon: '' }); // 実際はキャッシュのアイコン等を引く
+                            if (!db.userToCircles[data.applicantId]) db.userToCircles[data.applicantId] = [];
+                            db.userToCircles[data.applicantId].push(data.circleId);
+                        }
                     }
                     localStorage.setItem(DB_KEY, JSON.stringify(db));
-                    res({ success: true, memberId: m.memberId, name: m.name, icon: m.icon });
+                    res({ success: true });
                 }
-                else if (data.action === 'update_profile') {
-                    db.members.find(m => m.memberId === data.memberId).icon = data.icon;
-                    localStorage.setItem(DB_KEY, JSON.stringify(db)); res({success:true});
+                else if (data.action === 'get_db') {
+                    const c = db.circles[data.circleId];
+                    // 月末リセット判定
+                    const currentMonth = new Date().getMonth() + 1;
+                    if (c.lastResetMonth !== currentMonth) {
+                        c.fans = {};
+                        c.lastResetMonth = currentMonth;
+                        localStorage.setItem(DB_KEY, JSON.stringify(db));
+                    }
+                    res({ success: true, db: c });
+                }
+                else if (data.action === 'get_ranking') {
+                    const ranking = Object.keys(db.circles).map(id => {
+                        const c = db.circles[id];
+                        const totalFans = Object.values(c.fans).reduce((a, b) => a + b, 0);
+                        return { id: id, name: c.name, totalFans: totalFans };
+                    });
+                    ranking.sort((a, b) => b.totalFans - a.totalFans);
+                    res({ success: true, ranking: ranking.slice(0, 10) }); // 上位10サークル
                 }
                 else if (data.action === 'upload') {
-                    db.fans[data.memberId] = (db.fans[data.memberId] || 0) + 150000;
-                    localStorage.setItem(DB_KEY, JSON.stringify(db)); res({success:true, detectedFans: 150000});
+                    const c = db.circles[data.circleId];
+                    c.fans[data.memberId] = (c.fans[data.memberId] || 0) + 150000;
+                    localStorage.setItem(DB_KEY, JSON.stringify(db));
+                    res({ success: true, detectedFans: 150000 });
                 }
-                else if (data.action === 'get_db') { res({success:true, db: db}); }
                 else if (data.action === 'toggle_freeze') {
-                    db.frozen = db.frozen || {};
-                    db.frozen[data.memberId] = !db.frozen[data.memberId];
-                    localStorage.setItem(DB_KEY, JSON.stringify(db)); res({success:true});
+                    const c = db.circles[data.circleId];
+                    c.frozen = c.frozen || {};
+                    c.frozen[data.memberId] = !c.frozen[data.memberId];
+                    localStorage.setItem(DB_KEY, JSON.stringify(db));
+                    res({ success: true });
                 }
                 else if (data.action === 'save_admin') {
-                    db.totalTarget = data.totalTarget;
-                    db.discordWebhook = data.discordWebhook;
-                    db.individualTargets = { ...db.individualTargets, ...data.individualTargets };
-                    localStorage.setItem(DB_KEY, JSON.stringify(db)); res({success:true});
+                    const c = db.circles[data.circleId];
+                    if (data.name) c.name = data.name;
+                    c.totalTarget = data.totalTarget;
+                    c.discordWebhook = data.discordWebhook;
+                    c.adminId = data.adminId || c.adminId;
+                    if (data.adminPass) c.adminPass = data.adminPass;
+                    c.individualTargets = { ...c.individualTargets, ...data.individualTargets };
+                    localStorage.setItem(DB_KEY, JSON.stringify(db));
+                    res({ success: true });
                 }
             }, 100);
         });
