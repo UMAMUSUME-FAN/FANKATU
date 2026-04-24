@@ -26,6 +26,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 起動時に招待パラメータをチェック
     const urlParams = new URLSearchParams(window.location.search);
     const joinCid = urlParams.get('join');
+
+    async function handleAutoJoin() {
+        if (joinCid && currentUser) {
+            showToast("招待URLからサークルに参加中...");
+            // URLからパラメータを消す
+            window.history.replaceState({}, document.title, window.location.pathname);
+            
+            // 参加処理
+            await callBackend({ action: 'joinCircle', circleId: joinCid });
+            loginToCircle(joinCid);
+        }
+    }
     
     const params = new URLSearchParams(window.location.hash.substring(1));
     const token = params.get('access_token');
@@ -43,7 +55,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             } else {
                 showPortal();
             }
-        } catch(e) { console.error("Auth Fail", e); }
+        } catch(e) { 
+            console.error("Auth Fail", e); 
+            showPortal(); // 失敗してもポータルへ
+        }
     }
 
     async function showPortal() {
@@ -531,21 +546,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     };
 
-    // 起動時に招待パラメータをチェック
-    const urlParams = new URLSearchParams(window.location.search);
-    const joinCid = urlParams.get('join');
-
-    async function handleAutoJoin() {
-        if (joinCid && currentUser) {
-            showToast("招待URLからサークルに参加中...");
-            // URLからパラメータを消す
-            window.history.replaceState({}, document.title, window.location.pathname);
-            
-            // 参加処理
-            await callBackend({ action: 'joinCircle', circleId: joinCid });
-            loginToCircle(joinCid);
-        }
-    }
 
     // --- Admin Event Listeners ---
     const closeAdminCover = document.getElementById('closeAdmin');
