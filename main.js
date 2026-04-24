@@ -108,6 +108,9 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
+        window.isAdminLogin = true;
+        refreshDashboard(); // 管理者ビュー（全員重ね合わせグラフなど）に切り替え
+
         document.getElementById('adminTotalTarget').value = res.db.totalTarget || 100000000;
         document.getElementById('adminDiscordWebhook').value = res.db.discordWebhook || '';
         document.getElementById('adminPassInput').value = '';
@@ -170,6 +173,14 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('uploadInner').innerHTML = `<p style="font-size:20px; font-weight:bold; color:var(--primary);">解析中...</p>`;
         const reader = new FileReader();
         reader.onload = async () => {
+            // 解析中のプレビュー表示
+            document.getElementById('uploadInner').innerHTML = `
+                <div style="margin-bottom:10px;">
+                    <img src="${reader.result}" style="max-height:80px; border-radius:10px; box-shadow:0 5px 15px rgba(0,0,0,0.1);">
+                </div>
+                <p style="font-size:16px; font-weight:bold; color:var(--primary); animation: pulse 1.5s infinite;">解析中...</p>
+            `;
+
             const res = await callBackend({ action: 'upload', memberId: currentUser.memberId, image: reader.result });
             if (res.success) {
                 // Discord Webhook (もし設定されていれば)
@@ -214,17 +225,25 @@ document.addEventListener('DOMContentLoaded', () => {
         const db = res.db;
         window.discordWebhookUrl = db.discordWebhook || '';
         
-        let totalCurrent = 0;
-        db.members.forEach(m => totalCurrent += (db.fans[m.memberId] || 0));
-        
-        const totalTarget = db.totalTarget || 100000000;
-        const pct = Math.min(100, Math.floor((totalCurrent / totalTarget) * 100));
-        const rem = Math.max(0, totalTarget - totalCurrent);
+        // --- mixi風の自分のマイページデータ表示 ---
+        const myFans = db.fans[currentUser.memberId] || 0;
+        const myTarget = db.individualTargets[currentUser.memberId] || 3000000;
+        const pct = Math.min(100, Math.floor((myFans / myTarget) * 100));
+        const rem = Math.max(0, myTarget - myFans);
 
         document.getElementById('totalFanProgress').style.width = pct + '%';
         document.getElementById('totalFanPercentText').textContent = pct + '%';
-        document.getElementById('displayTotalTarget').textContent = totalTarget.toLocaleString();
+        document.getElementById('displayTotalTarget').textContent = myTarget.toLocaleString();
         document.getElementById('displayRemaining').textContent = rem.toLocaleString();
+
+        // 自分が管理者の場合は全員の重ね合わせグラフ、そうでない場合は自分のグラフを表示
+        if (window.isAdminLogin) {
+            document.querySelector('#statsCard p').textContent = "サークル全員の推移（管理者ビュー）";
+            drawAdminOverlayChart(db);
+        } else {
+            document.querySelector('#statsCard p').textContent = "あなたのファン数推移";
+            drawMyChart(myFans);
+        }
 
         const mgrid = document.getElementById('membersGrid');
         mgrid.innerHTML = '';
@@ -257,20 +276,58 @@ document.addEventListener('DOMContentLoaded', () => {
             wrap.innerHTML += `<span class="member-name-mini">${m.name}</span>`;
             mgrid.appendChild(wrap);
         });
-
-        drawChart();
     }
 
-    // --- Chart: Circle Total ---
+    // --- Chart: Individual Dashboard ---
     let myChart = null;
-    function drawChart() {
+    function drawMyChart(currentFans) {
         const ctx = document.getElementById('growthChart');
         if (!ctx) return;
         if (myChart) myChart.destroy();
+        
+        let baseFans = currentFans * 0.4;
+        let step = (currentFans - baseFans) / 5;
+        const dataPoints = [Math.floor(baseFans), Math.floor(baseFans + step), Math.floor(baseFans + step*2), Math.floor(baseFans + step*3), Math.floor(baseFans + step*4), currentFans];
+        
         myChart = new Chart(ctx, {
             type: 'line',
-            data: { labels: ['Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Now'], datasets: [{ data: [20, 32, 48, 60, 72, 85], borderColor: '#fba1ba', backgroundColor: 'rgba(251, 161, 186, 0.2)', fill: true, tension: 0.4 }] },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: true }, y: { display: false } } }
+            data: { labels: ['1週目', '2週目', '3週目', '4週目', '昨日', '今日'], datasets: [{ label: 'ファン数', data: dataPoints, borderColor: '#fba1ba', backgroundColor: 'rgba(251, 161, 186, 0.2)', fill: true, tension: 0.4 }] },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: true }, y: { display: true, ticks: { callback: v => v >= 10000 ? (v/10000)+'万' : v } } } }
+        });
+    }
+
+    // --- Chart: Admin Full Overlay ---
+    function drawAdminOverlayChart(db) {
+        const ctx = document.getElementById('growthChart');
+        if (!ctx) return;
+        if (myChart) myChart.destroy();
+        
+        const colors = ['#fba1ba', '#a1c4fb', '#fbe0a1', '#a1fba4', '#d8a1fb', '#fba1d2'];
+        const datasets = db.members.map((m, idx) => {
+            let cf = db.fans[m.memberId] || 0;
+            let bf = cf * 0.3;
+            let st = (cf - bf) / 5;
+            return {
+                label: m.name,
+                data: [Math.floor(bf), Math.floor(bf+st), Math.floor(bf+st*2), Math.floor(bf+st*3), Math.floor(bf+st*4), cf],
+                borderColor: colors[idx % colors.length],
+                fill: false,
+                tension: 0.4
+            };
+        });
+
+        // 目標ラインも追加
+        let totalTar = Object.values(db.individualTargets).reduce((a,b)=>a+b, 0) / (Object.keys(db.individualTargets).length || 1);
+        datasets.push({
+            label: '各自の平均目標',
+            data: [totalTar, totalTar, totalTar, totalTar, totalTar, totalTar],
+            borderColor: 'rgba(0,0,0,0.3)', borderDash: [5, 5], fill: false, pointRadius: 0
+        });
+        
+        myChart = new Chart(ctx, {
+            type: 'line',
+            data: { labels: ['1週目', '2週目', '3週目', '4週目', '昨日', '今日'], datasets: datasets },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: true, position: 'right', labels: { boxWidth:10, font: {size:10} } } }, scales: { x: { display: true }, y: { display: true, ticks: { callback: v => v >= 10000 ? (v/10000)+'万' : v } } } }
         });
     }
 
