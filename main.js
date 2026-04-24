@@ -18,10 +18,14 @@ async function callBackend(p) {
             method: 'POST',
             body: JSON.stringify({ ...p, currentUser: currentUser })
         });
+        if (!response.ok) {
+            console.error("HTTP Error:", response.status);
+            return null;
+        }
         const result = await response.json();
         return result.success ? result.db : null;
     } catch (e) {
-        console.error("Backend Error:", e);
+        console.error("Fetch Error:", e);
         return null;
     }
 }
