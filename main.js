@@ -19,11 +19,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     const token = params.get('access_token');
     if (token) {
         window.history.replaceState({}, document.title, window.location.pathname);
-        const userRes = await fetch('https://discord.com/api/users/@me', { headers: { Authorization: `Bearer ${token}` } });
-        const du = await userRes.json();
-        currentUser = { id: du.id, name: du.username, avatar: `https://cdn.discordapp.com/avatars/${du.id}/${du.avatar}.png` };
-        authOverlay.classList.add('hidden');
-        showPortal();
+        try {
+            const userRes = await fetch('https://discord.com/api/users/@me', { headers: { Authorization: `Bearer ${token}` } });
+            const du = await userRes.json();
+            currentUser = { id: du.id, name: du.username, avatar: `https://cdn.discordapp.com/avatars/${du.id}/${du.avatar}.png` };
+            authOverlay.classList.add('hidden');
+            showPortal();
+        } catch(e) { console.error("Auth Fail", e); }
     }
 
     async function showPortal() {
@@ -70,7 +72,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     async function requestJoinCircle(cid) {
         await callBackend({ action: 'requestJoin', circleId: cid, userId: currentUser.id });
-        alert('申請しました！'); renderPortalCircles();
+        showToast('参加申請を送りました！'); renderPortalCircles();
     }
 
     function updateDashboard() {
@@ -97,16 +99,46 @@ document.addEventListener('DOMContentLoaded', async () => {
             const m = currentCircle.members[uid];
             const d = document.createElement('div'); d.className = 'member-avatar-mini';
             if(m.icon) d.style.backgroundImage = `url('${m.icon}')`; else d.textContent = m.name.substring(0,1);
+            d.onclick = () => showMemberDetails(uid);
             g.appendChild(d);
         });
     }
 
+    let currentTagFilter = null;
+
     function renderTimeline() {
         const list = document.getElementById('timelineList'); list.innerHTML = '';
-        const posts = currentCircle.timeline || [];
+        let posts = currentCircle.timeline || [];
+        
+        // Tag Filtering
+        if (currentTagFilter) {
+            posts = posts.filter(p => p.text.includes(currentTagFilter));
+            const clearBtn = document.createElement('div');
+            clearBtn.innerHTML = `<button class="glass-btn" style="width:100%; font-size:12px; margin-bottom:10px; background:rgba(0,0,0,0.05);">絞り込み中: ${currentTagFilter} (解除)</button>`;
+            clearBtn.onclick = () => { currentTagFilter = null; renderTimeline(); };
+            list.appendChild(clearBtn);
+        }
+
         posts.slice().reverse().forEach(p => {
             const div = document.createElement('div'); div.className = 'timeline-item';
-            div.innerHTML = `<div class="timeline-header"><span class="timeline-user">${p.userName}</span><span class="timeline-time">${p.time}</span></div><div class="timeline-content">${p.text}</div>`;
+            
+            // Linkify Hashtags
+            const linkedText = p.text.replace(/#(\S+)/g, '<span class="hashtag" style="color:var(--discord-blue); cursor:pointer; font-weight:bold;">#$1</span>');
+            
+            let imgHtml = p.image ? `<img src="${p.image}" style="width:100%; border-radius:10px; margin-top:10px; border:1px solid #eee;">` : '';
+            let aiHtml = p.aiComment ? `<div style="margin-top:10px; padding:10px; background:#f0f7ff; border-radius:10px; font-size:12px; border-left:3px solid #5865F2;"><b>✨ AI分析:</b> ${p.aiComment}</div>` : '';
+            
+            div.innerHTML = `<div class="timeline-header"><span class="timeline-user">${p.userName}</span><span class="timeline-time">${p.time}</span></div><div class="timeline-content">${linkedText}</div>${imgHtml}${aiHtml}`;
+            
+            // Add click events to hashtags
+            div.querySelectorAll('.hashtag').forEach(tagEl => {
+                tagEl.onclick = (e) => {
+                    e.stopPropagation();
+                    currentTagFilter = tagEl.textContent;
+                    renderTimeline();
+                };
+            });
+
             list.appendChild(div);
         });
     }
@@ -114,56 +146,96 @@ document.addEventListener('DOMContentLoaded', async () => {
     function renderAIWisdom() {
         const area = document.getElementById('aiWisdomContent');
         if (!currentCircle.wisdom || currentCircle.wisdom.length === 0) {
-            area.innerHTML = "つぶやきを待機中... AIが攻略情報を抽出します。"; return;
+            area.innerHTML = "パドックにつぶやいてみましょう。AIが攻略情報を『継承』し、自動でWiki化します。"; return;
         }
-        area.innerHTML = currentCircle.wisdom.map(w => `<div class="wisdom-tip"><span class="wisdom-tag">${w.category}</span> ${w.text}</div>`).join('');
+        const cats = { 'ステータス': 'trending_up', '脚質': 'directions_run', '戦略': 'psychology', 'レース': 'flag' };
+        area.innerHTML = currentCircle.wisdom.map(w => `
+            <div class="wisdom-tip" style="display:flex; gap:10px; align-items:flex-start;">
+                <span class="material-icons-outlined" style="font-size:16px; color:var(--secondary);">${cats[w.category] || 'shutter_speed'}</span>
+                <div><span class="wisdom-tag">${w.category}</span><span style="font-weight:600; font-size:13px;">${w.text}</span></div>
+            </div>
+        `).join('');
+    }
+
+    async function showMemberDetails(uid) {
+        const m = currentCircle.members[uid]; if (!m) return;
+        alert(`${m.name} さんの状況:\n目標達成率: ${(m.totalFans / m.targetFans * 100).toFixed(1)}%\n「現在のエースとしての風格が出ていますね！」 by AI Secretary`);
     }
 
     async function generateAIAnalysis() {
-        const area = document.getElementById('aiMessageArea');
-        area.innerHTML = "AIが思考中...";
-        
+        const area = document.getElementById('aiMessageArea'); area.innerHTML = "AIが思考中...";
         if (currentCircle.aiKey) {
-            const prompt = `サークル「${currentCircle.name}」の状況を分析して短くアドバイスして。データ：目標達成率 ${(currentCircle.totalFans/1000000).toFixed(1)}Mファン突破。メンバー数 ${Object.keys(currentCircle.members).length}名。`;
+            const prompt = `サークル「${currentCircle.name}」の分析をして。全体達成率 ${(currentCircle.totalFans/1000000).toFixed(1)}Mファン突破。`;
             const result = await callGemini(currentCircle.aiKey, prompt);
             area.innerHTML = result;
-        } else {
-            area.innerHTML = "APIキーが設定されていないため、簡易分析を表示中：順調なペースです！エース級が引っ張っています。";
-        }
+        } else { area.innerHTML = "APIキー未設定。順調なペースです！"; }
     }
 
-    async function callGemini(key, prompt) {
+    async function callGemini(key, prompt, imageBase64 = null) {
         try {
             const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${key}`;
+            const parts = [{ text: prompt }];
+            if (imageBase64) {
+                parts.push({ inline_data: { mime_type: "image/jpeg", data: imageBase64.split(',')[1] } });
+            }
             const res = await fetch(url, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+                body: JSON.stringify({ contents: [{ parts }] })
             });
             const data = await res.json();
             return data.candidates[0].content.parts[0].text;
-        } catch (e) {
-            return "AI通信エラー：キーを確認してください。";
-        }
+        } catch (e) { return "AIが少しお疲れのようです。キーを確認してください。"; }
     }
 
-    // Handlers
+    // --- Timeline Actions ---
+    const imgInput = document.getElementById('timelineImageInput');
+    const previewArea = document.getElementById('timelineImagePreview');
+    let currentBase64 = null;
+
+    document.getElementById('attachImgBtn').onclick = () => imgInput.click();
+    imgInput.onchange = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = (re) => {
+                currentBase64 = re.target.result;
+                document.getElementById('previewImg').src = currentBase64;
+                previewArea.style.display = 'block';
+            };
+            reader.readAsDataURL(file);
+        }
+    };
+    document.getElementById('removePreviewBtn').onclick = () => { currentBase64 = null; previewArea.style.display = 'none'; };
+
+    document.getElementById('postTimelineBtn').onclick = async () => {
+        const input = document.getElementById('timelineInput');
+        if(!input.value && !currentBase64) return;
+        
+        let aiComment = null;
+        if(currentCircle.aiKey && currentBase64) {
+            showToast("AIが画像を解析中...");
+            aiComment = await callGemini(currentCircle.aiKey, "このウマ娘の育成画面または編成画像を分析して、攻略に役立つアドバイスを100文字以内でして。", currentBase64);
+        }
+
+        await callBackend({ 
+            action: 'postTimeline', 
+            circleId: currentCircle.id, 
+            userName: currentUser.name, 
+            text: input.value || (currentBase64 ? "画像をアップロードしました" : ""), 
+            image: currentBase64,
+            aiComment: aiComment
+        });
+
+        input.value = ''; currentBase64 = null; previewArea.style.display = 'none';
+        updateDataAndUI();
+    };
+
+    // --- General Event Listeners ---
     document.getElementById('discordLoginBtn').onclick = () => {
         const r = window.location.origin + window.location.pathname;
         window.location.href = `https://discord.com/api/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&redirect_uri=${encodeURIComponent(r)}&response_type=token&scope=identify`;
     };
-
-    document.getElementById('postTimelineBtn').onclick = async () => {
-        const input = document.getElementById('timelineInput'); if(!input.value) return;
-        await callBackend({ action: 'postTimeline', circleId: currentCircle.id, userName: currentUser.name, text: input.value });
-        input.value = ''; updateDataAndUI();
-    };
-
-    async function updateDataAndUI() {
-        const res = await callBackend({ action: 'getCircleData', circleId: currentCircle.id });
-        currentCircle = res.circle; updateDashboard();
-    }
-
     document.getElementById('statsBtn').onclick = (e) => { e.preventDefault(); masterStatsOverlay.classList.remove('hidden'); generateAIAnalysis(); };
     document.getElementById('closeStatsBtn').onclick = () => masterStatsOverlay.classList.add('hidden');
     document.getElementById('switchCircleBtn').onclick = showPortal;
@@ -171,15 +243,48 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('closeAdmin').onclick = () => document.getElementById('admin-modal').classList.add('hidden');
     document.getElementById('adminBtn').onclick = (e) => {
         e.preventDefault(); const p = prompt('Pass:');
-        if(p === currentCircle.adminPass) { document.getElementById('admin-modal').classList.remove('hidden'); document.getElementById('adminCircleNameInput').value = currentCircle.name; document.getElementById('adminAiKey').value = currentCircle.aiKey || ''; }
+        if(p === currentCircle.adminPass) { 
+            document.getElementById('admin-modal').classList.remove('hidden'); 
+            document.getElementById('adminCircleNameInput').value = currentCircle.name; 
+            document.getElementById('adminAiKey').value = currentCircle.aiKey || ''; 
+        }
     };
-    
     document.getElementById('saveAdminBtn').onclick = async () => {
         const name = document.getElementById('adminCircleNameInput').value;
         const key = document.getElementById('adminAiKey').value;
         await callBackend({ action: 'updateConfig', circleId: currentCircle.id, name, aiKey: key });
-        alert('保存しました！'); document.getElementById('admin-modal').classList.add('hidden'); updateDataAndUI();
+        showToast("✅ 設定を保存しました！"); 
+        setTimeout(() => document.getElementById('admin-modal').classList.add('hidden'), 1000);
+        updateDataAndUI();
     };
+
+    window.addEventListener('paste', async (e) => {
+        const items = e.clipboardData.items;
+        for (let item of items) {
+            if (item.type.indexOf('image') !== -1) {
+                const inc = Math.floor(Math.random() * 500000) + 100000;
+                const oldM = currentCircle.members[currentUser.id] || { totalFans: 0, targetFans: 3000000 };
+                const newFans = oldM.totalFans + inc;
+                await callBackend({ action: 'updateFans', circleId: currentCircle.id, fans: newFans });
+                if (oldM.totalFans < oldM.targetFans && newFans >= oldM.targetFans) {
+                    launchConfetti();
+                    showToast("🎉 目標達成！！素晴らしいです！！", "success");
+                } else { showToast(`${(inc/10000).toFixed(1)}万ファン獲得！`); }
+                updateDataAndUI();
+            }
+        }
+    });
+
+    function launchConfetti() {
+        for(let i=0;i<60;i++) {
+            const c=document.createElement('div'); c.className='confetti';
+            c.style.left=Math.random()*100+'vw'; c.style.backgroundColor=['#fba1ba','#e0c384','#fff'][Math.floor(Math.random()*3)];
+            c.style.animationDelay=Math.random()*2+'s'; document.body.appendChild(c);
+            setTimeout(()=>c.remove(),4000);
+        }
+    }
+    function showToast(m, t='success'){ const s=document.getElementById('toast'); s.textContent=m; s.className=`toast show ${t}`; setTimeout(()=>s.classList.remove('show'),3000); }
+    async function updateDataAndUI(){ const res=await callBackend({action:'getCircleData', circleId:currentCircle.id}); currentCircle=res.circle; updateDashboard(); }
 
     let growthChart = null;
     function renderGrowthChart() {
@@ -189,7 +294,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 });
 
-// --- Mock Backend ---
 async function callBackend(p) {
     let db = JSON.parse(localStorage.getItem(DB_KEY));
     if (!db) { db = { circles: { 'circle-1': { id: 'circle-1', name: 'NPC@サークル', adminId: 'admin', adminPass: '1234', totalFans: 1500000, members: { 'npc-1': { name: 'NPC', totalFans: 500000, targetFans: 3000000, history: [10, 20, 30] } }, timeline: [], wisdom: [] } }, userToCircles: {} }; localStorage.setItem(DB_KEY, JSON.stringify(db)); }
@@ -198,14 +302,15 @@ async function callBackend(p) {
     if (p.action === 'updateConfig') { db.circles[p.circleId].name = p.name; db.circles[p.circleId].aiKey = p.aiKey; localStorage.setItem(DB_KEY, JSON.stringify(db)); return { success: true }; }
     if (p.action === 'postTimeline') {
         const c = db.circles[p.circleId]; if(!c.timeline) c.timeline = [];
-        c.timeline.push({ userName: p.userName, text: p.text, time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) });
-        const k={'スタミナ':'ステータス','逃げ':'脚質','レース':'戦略','スピード':'ステータス'};
-        for(let x in k) if(p.text.includes(x)) { if(!c.wisdom) c.wisdom = []; c.wisdom.push({category: k[x], text: p.text}); }
+        c.timeline.push({ userName: p.userName, text: p.text, time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}), image: p.image, aiComment: p.aiComment });
+        const k={'スタミナ':'ステータス','スピード':'ステータス','根性':'ステータス','逃げ':'脚質','先行':'脚質','因子':'育成','継承':'育成'};
+        for(let x in k) if(p.text.includes(x)) { if(!c.wisdom) c.wisdom = []; if(!c.wisdom.some(w=>w.text===p.text)) c.wisdom.push({category: k[x], text: p.text}); }
         localStorage.setItem(DB_KEY, JSON.stringify(db)); return { success: true };
     }
     if (p.action === 'updateFans') {
         const c = db.circles[p.circleId]; let m = c.members[currentUser.id]; if(!m) m = c.members[currentUser.id] = { name: currentUser.name, totalFans: 0, targetFans: 3000000, history: [], icon: currentUser.avatar };
-        m.totalFans = p.fans; m.history.push(p.fans); localStorage.setItem(DB_KEY, JSON.stringify(db)); return { success: true };
+        m.totalFans = p.fans; m.history.push(p.fans);
+        c.totalFans = Object.values(c.members).reduce((s,x)=>s+x.totalFans, 0); localStorage.setItem(DB_KEY, JSON.stringify(db)); return { success: true };
     }
     return db;
 }
