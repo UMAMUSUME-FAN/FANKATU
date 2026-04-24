@@ -250,6 +250,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('adminIdInput').value = currentAdminId;
         document.getElementById('adminTotalTarget').value = res.db.totalTarget || 100000000;
         document.getElementById('adminDiscordWebhook').value = res.db.discordWebhook || '';
+        document.getElementById('adminDiscordInvite').value = res.db.discordInvite || '';
         document.getElementById('adminPassInput').value = '';
         const listDiv = document.getElementById('adminMemberList');
         listDiv.innerHTML = '';
@@ -305,6 +306,7 @@ document.addEventListener('DOMContentLoaded', () => {
             name: document.getElementById('adminCircleNameInput').value,
             totalTarget: parseInt(document.getElementById('adminTotalTarget').value),
             discordWebhook: document.getElementById('adminDiscordWebhook').value,
+            discordInvite: document.getElementById('adminDiscordInvite').value,
             adminId: document.getElementById('adminIdInput').value,
             adminPass: document.getElementById('adminPassInput').value,
             individualTargets: {}
@@ -449,6 +451,15 @@ document.addEventListener('DOMContentLoaded', () => {
         // UIにサークル名を反映
         document.querySelectorAll('.circle-name-display').forEach(el => el.textContent = db.name);
         
+        // Discordリンクの表示
+        const dlink = document.getElementById('circleDiscordLink');
+        if (db.discordInvite) {
+            dlink.href = db.discordInvite;
+            dlink.style.display = 'flex';
+        } else {
+            dlink.style.display = 'none';
+        }
+
         refreshRanking();
 
         // --- mixi風の自分のマイページデータ表示 ---
@@ -693,8 +704,22 @@ document.addEventListener('DOMContentLoaded', () => {
         if (GAS_ENDPOINT) { const r = await fetch(GAS_ENDPOINT, { method: 'POST', body: JSON.stringify(data) }); return await r.json(); }
         return new Promise(res => {
             setTimeout(() => {
-                // 完全マルチ対応DB構造: { circles: { id: { ... } }, userToCircles: { userId: [ids] } }
-                let db = JSON.parse(localStorage.getItem(DB_KEY) || '{"circles":{}, "userToCircles":{}}');
+                let db;
+                try {
+                    const raw = localStorage.getItem(DB_KEY);
+                    db = JSON.parse(raw || '{"circles":{}, "userToCircles":{}}');
+                    // --- セルフヒーリング（データ整合性チェック） ---
+                    // 古い形式のデータ（circlesキーがない）が見つかった場合は強制リセット
+                    if (raw && !db.circles) {
+                        console.warn("Old data format detected. Resetting to new multi-circle format.");
+                        db = {"circles":{}, "userToCircles":{}};
+                        localStorage.setItem(DB_KEY, JSON.stringify(db));
+                    }
+                } catch (e) {
+                    console.error("DB Load Error, resetting:", e);
+                    db = {"circles":{}, "userToCircles":{}};
+                    localStorage.setItem(DB_KEY, JSON.stringify(db));
+                }
                 
                 if (data.action === 'discord_login') {
                     // ユーザー情報の保存（ここではサークル所属とは別）
@@ -798,6 +823,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (data.name) c.name = data.name;
                     c.totalTarget = data.totalTarget;
                     c.discordWebhook = data.discordWebhook;
+                    c.discordInvite = data.discordInvite;
                     c.adminId = data.adminId || c.adminId;
                     if (data.adminPass) c.adminPass = data.adminPass;
                     c.individualTargets = { ...c.individualTargets, ...data.individualTargets };

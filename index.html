@@ -97,7 +97,12 @@
             <!-- Center Panel (Hero) -->
             <div class="hero-card glass-panel" id="heroCard">
                 <div class="hero-top" style="display:flex; justify-content:space-between; width:100%; align-items:center;">
-                    <span class="tag circle-name-display" style="color:var(--primary); font-weight:700;">Circle Name</span>
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <span class="tag circle-name-display" style="color:var(--primary); font-weight:700;">Circle Name</span>
+                        <a id="circleDiscordLink" href="#" target="_blank" class="glass-btn" style="padding:4px 10px; font-size:10px; background:#5865F2; color:white; display:none; align-items:center; gap:5px; text-decoration:none; border-radius:10px;">
+                            <img src="https://assets-global.website-files.com/6257adef93867e50d84d30e2/636e0a6918e57475a843f59f_icon_clyde_blurple_RGB.svg" style="width:14px; filter:brightness(0) invert(1);"> 参加
+                        </a>
+                    </div>
                     <span class="tag">‘Uma Musume’</span>
                 </div>
                 <h1 class="hero-giant-title">My<br>Fan Quota</h1>
@@ -203,8 +208,16 @@
                 </div>
 
                 <div style="margin-bottom: 20px; border-top: 1px solid rgba(0,0,0,0.1); padding-top: 20px;">
+                    <label style="font-size:14px; font-weight:bold; color:#5865F2; display:flex; align-items:center; gap:5px;">
+                        Discord招待URL (外部公開用)
+                    </label>
+                    <input type="text" id="adminDiscordInvite" class="glass-input" style="margin-top:5px;" placeholder="https://discord.gg/...">
+                    <p style="font-size:11px; margin-top:3px; color:var(--text-muted);">※サークル紹介用の招待リンク。ダッシュボードにボタンが表示されます。</p>
+                </div>
+
+                <div style="margin-bottom: 20px; border-top: 1px solid rgba(0,0,0,0.1); padding-top: 20px;">
                     <label style="font-size:14px; font-weight:bold; color:#7289da; display:flex; align-items:center; gap:5px;">
-                        Discord連携 (Webhook URL)
+                        Discord連携 (通知用Webhook)
                     </label>
                     <input type="text" id="adminDiscordWebhook" class="glass-input" style="margin-top:5px;" placeholder="https://discord.com/api/webhooks/...">
                 </div>
