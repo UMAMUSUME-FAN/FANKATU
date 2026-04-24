@@ -23,6 +23,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     await callBackend({ action: 'init' });
     
+    // 起動時に招待パラメータをチェック
+    const urlParams = new URLSearchParams(window.location.search);
+    const joinCid = urlParams.get('join');
+    
     const params = new URLSearchParams(window.location.hash.substring(1));
     const token = params.get('access_token');
     if (token) {
@@ -47,6 +51,19 @@ document.addEventListener('DOMContentLoaded', async () => {
         portalOverlay.classList.remove('hidden');
         const pName = document.getElementById('portalUserName'); if(pName) pName.textContent = currentUser.name;
         const ava = document.getElementById('portalUserAvatar'); if(currentUser.avatar && ava) ava.style.backgroundImage = `url('${currentUser.avatar}')`;
+        
+        // 新規作成ボタンのイベント
+        const createBtn = document.getElementById('createNewCircleBtn');
+        if(createBtn) createBtn.onclick = async () => {
+            const name = prompt("作成するサークルの名前を入力してください:");
+            if (name) {
+                const res = await callBackend({ action: 'createCircle', name: name });
+                showToast(`サークル『${name}』を設立しました！`);
+                renderPortalCircles(); // 一覧を更新
+                loginToCircle(res.circleId); // 自動で入室
+            }
+        };
+
         renderPortalCircles();
     }
 
@@ -427,7 +444,57 @@ document.addEventListener('DOMContentLoaded', async () => {
     const statsBtn = document.getElementById('statsBtn'); if(statsBtn) statsBtn.onclick = (e) => { e.preventDefault(); const m = document.getElementById('masterStatsOverlay'); if(m) m.classList.remove('hidden'); generateAIAnalysis(); };
     const closeStats = document.getElementById('closeStatsBtn'); if(closeStats) closeStats.onclick = () => { const m = document.getElementById('masterStatsOverlay'); if(m) m.classList.add('hidden'); };
     const switchBtn = document.getElementById('switchCircleBtn'); if(switchBtn) switchBtn.onclick = showPortal;
-    const adminBtn = document.getElementById('adminBtn'); if(adminBtn) adminBtn.onclick = (e) => { e.preventDefault(); const am = document.getElementById('admin-modal'); if(am) am.classList.remove('hidden'); };
+    const adminBtn = document.getElementById('adminBtn'); 
+    if(adminBtn) adminBtn.onclick = (e) => { 
+        e.preventDefault(); 
+        const am = document.getElementById('admin-modal'); 
+        if(am) {
+            am.classList.remove('hidden');
+            renderAdminMembers(); // 管理用名簿を表示
+        }
+    };
+
+    function renderAdminMembers() {
+        const list = document.getElementById('adminMemberList'); if(!list || !currentCircle) return;
+        list.innerHTML = '';
+        const uid = currentUser?.id || 'guest';
+        const isOwner = (currentCircle.ownerId === uid || !currentCircle.ownerId);
+
+        Object.keys(currentCircle.members || {}).forEach(mid => {
+            const m = currentCircle.members[mid];
+            const div = document.createElement('div');
+            div.style = "display:flex; justify-content:space-between; align-items:center; padding:10px; border-bottom:1px solid rgba(0,0,0,0.05);";
+            
+            let actionBtn = "";
+            if (isOwner && mid !== uid) {
+                actionBtn = `<button class="glass-btn primary" style="font-size:10px; padding:4px 10px;" onclick="transferLeader('${mid}', '${m.name}')">👑 譲渡</button>`;
+            } else if (mid === currentCircle.ownerId || (mid === 'guest' && !currentCircle.ownerId)) {
+                actionBtn = `<span style="font-size:10px; color:var(--primary); font-weight:bold;">👑 リーダー</span>`;
+            }
+
+            div.innerHTML = `
+                <div style="display:flex; align-items:center; gap:10px;">
+                    <div class="member-avatar-mini" style="background-image:url('${m.icon || ''}'); background-size:cover; width:30px; height:30px;">${m.icon ? '' : m.name.substring(0,1)}</div>
+                    <div>
+                        <div style="font-weight:bold; font-size:12px;">${m.name}</div>
+                        <div style="font-size:10px; color:var(--text-muted);">${(m.totalFans || 0).toLocaleString()} ファン</div>
+                    </div>
+                </div>
+                ${actionBtn}
+            `;
+            list.appendChild(div);
+        });
+    }
+
+    window.transferLeader = async (targetId, targetName) => {
+        if (confirm(`リーダー権限を ${targetName} さんへ譲渡します。よろしいですか？\n※譲渡するとあなたはこの管理画面を操作できなくなります。`)) {
+            await callBackend({ action: 'transferOwner', circleId: currentCircle.id, newOwnerId: targetId });
+            showToast(`${targetName} さんへリーダー権限を譲渡しました`);
+            const am = document.getElementById('admin-modal');
+            if(am) am.classList.add('hidden');
+            updateDataAndUI();
+        }
+    };
 
     // --- Core Functions ---
     function renderGrowthChart() {
@@ -539,7 +606,9 @@ async function callBackend(p) {
         db.masterConfig.aiKey = 'AIzaSyAzQdz599McEjgJkwN2tGJbfpWNfKIkCSg';
         localStorage.setItem(DB_KEY, JSON.stringify(db));
     }
-    if (!db.circles['circle-1']) { db.circles['circle-1'] = { id: 'circle-1', name: 'NPC@サークル', members: {}, timeline: [] }; }
+    if (!db.circles['circle-1']) { 
+        db.circles['circle-1'] = { id: 'circle-1', name: 'NPC@サークル', members: {}, timeline: [], ownerId: 'guest' }; 
+    }
 
     if (p.action === 'init' || p.action === 'getAllCircles') return db;
     
@@ -598,6 +667,37 @@ async function callBackend(p) {
         if (!db.userToCircles[currentUser.id].includes(p.circleId)) {
             db.userToCircles[currentUser.id].push(p.circleId);
         }
+        localStorage.setItem(DB_KEY, JSON.stringify(db));
+        return { success: true };
+    }
+
+    if (p.action === 'createCircle') {
+        const cid = 'circle-' + Date.now();
+        const uid = currentUser?.id || 'guest';
+        db.circles[cid] = { 
+            id: cid, 
+            name: p.name, 
+            members: {}, 
+            timeline: [], 
+            ownerId: uid,
+            defaultTarget: 3000000 
+        };
+        // 自分自身をメンバーに追加
+        db.circles[cid].members[uid] = { 
+            name: (currentUser?.name || 'Trainer'), 
+            totalFans: 0, 
+            targetFans: 3000000, 
+            history: [], 
+            icon: (currentUser?.avatar || '') 
+        };
+        if (!db.userToCircles[uid]) db.userToCircles[uid] = [];
+        db.userToCircles[uid].push(cid);
+        localStorage.setItem(DB_KEY, JSON.stringify(db));
+        return { success: true, circleId: cid };
+    }
+
+    if (p.action === 'transferOwner') {
+        targetCircle.ownerId = p.newOwnerId;
         localStorage.setItem(DB_KEY, JSON.stringify(db));
         return { success: true };
     }
