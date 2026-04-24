@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Uma Tracker</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Noto+Sans+JP:wght@400;500;700&family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Outlined" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <!-- Auth Overlay (ログイン) -->
+    <div id="authOverlay" class="auth-overlay">
+        <div class="auth-card">
+            <h1 style="font-family: 'Playfair Display', serif; font-size: 32px; color: #4a282f;">Uma Tracker</h1>
+            <p style="color: #9d8e90; margin-bottom: 20px;">サークル専用ダッシュボード</p>
+            
+            <div style="display:flex; margin-bottom: 20px;">
+                <button class="auth-tab active" id="tab-login" style="flex:1; padding:10px; border:none; background:transparent; border-bottom:2px solid #fba1ba; font-weight:bold;">ログイン</button>
+                <button class="auth-tab" id="tab-register" style="flex:1; padding:10px; border:none; background:transparent; border-bottom:2px solid #eee; color:#bbb; font-weight:bold;">新規登録</button>
+            </div>
+            
+            <form id="form-login">
+                <input type="text" id="login-name" class="glass-input" required placeholder="メンバー名" style="margin-bottom:15px;">
+                <input type="password" id="login-pass" class="glass-input" required placeholder="パスワード" style="margin-bottom:15px;">
+                <button type="submit" class="glass-btn primary" style="width:100%; margin-bottom:10px;">ログイン</button>
+            </form>
+            
+            <form id="form-register" class="hidden">
+                <input type="text" id="reg-name" class="glass-input" required placeholder="登録する名前" style="margin-bottom:15px;">
+                <input type="password" id="reg-pass" class="glass-input" required placeholder="パスワード" style="margin-bottom:15px;">
+                <button type="submit" class="glass-btn primary" style="width:100%; margin-bottom:10px;">登録</button>
+            </form>
+            <div id="auth-message" style="color:#ff6b6b; font-size:14px;"></div>
+        </div>
+    </div>
+
+    <!-- Main App Layout (サムネイル風) -->
+    <div class="app-layout" id="appWrapper" style="display:none;">
+        
+        <!-- Top Nav (Floating Pill) -->
+        <div class="top-nav-pill">
+            <a href="#" class="nav-link active" data-target="heroCard">
+                <span class="material-icons-outlined">home</span>
+                <div style="display:flex; flex-direction:column; line-height:1.2;"><span>Home</span><span style="font-size:10px; color:var(--text-muted); font-weight:normal;">ホーム</span></div>
+            </a>
+            <a href="#" class="nav-link" data-target="statsCard">
+                <span class="material-icons-outlined">bar_chart</span>
+                <div style="display:flex; flex-direction:column; line-height:1.2;"><span>Stats</span><span style="font-size:10px; color:var(--text-muted); font-weight:normal;">サークル統計</span></div>
+            </a>
+            <a href="#" class="nav-link" data-target="membersCard">
+                <span class="material-icons-outlined">group</span>
+                <div style="display:flex; flex-direction:column; line-height:1.2;"><span>Circle</span><span style="font-size:10px; color:var(--text-muted); font-weight:normal;">メンバー一覧</span></div>
+            </a>
+            <a href="#" id="adminBtn" style="text-decoration:none; color:var(--text-muted); font-weight:600; display:flex; align-items:center; gap:8px; padding:10px 20px; border-radius:30px; transition:0.3s;">
+                <span class="material-icons-outlined">admin_panel_settings</span>
+                <div style="display:flex; flex-direction:column; line-height:1.2;"><span>Admin</span><span style="font-size:10px; color:var(--text-muted); font-weight:normal;">管理者</span></div>
+            </a>
+            <div class="user-avatar" id="userAvatar" title="自分のアイコン変更">?</div>
+            <input type="file" id="myAvatarUpload" style="display:none;" accept="image/*">
+            <button id="logoutBtn" style="border:none; background:transparent; cursor:pointer; color:#9d8e90; margin-left:10px;" title="ログアウト"><span class="material-icons-outlined">logout</span></button>
+        </div>
+
+        <div class="main-dashboard-grid">
+            <!-- Left Tiny Nav -->
+            <div class="tiny-side-nav">
+                <span class="material-icons-outlined nav-symbol active" data-target="heroCard" title="Home">home</span>
+                <span class="material-icons-outlined nav-symbol" data-target="statsCard" title="Stats">bar_chart</span>
+                <span class="material-icons-outlined nav-symbol" data-target="membersCard" title="Members">group</span>
+                <span class="material-icons-outlined nav-symbol" data-target="dropzone" title="Upload">cloud_upload</span>
+            </div>
+
+            <!-- Center Panel (Hero) -->
+            <div class="hero-card glass-panel" id="heroCard">
+                <div class="hero-top">
+                    <span class="tag">‘Uma Musume’</span>
+                </div>
+                <h1 class="hero-giant-title">Monthly<br>Fan Quota</h1>
+                <div class="hero-progress-section">
+                    <div class="hero-bar-track">
+                        <div class="hero-bar-fill" id="totalFanProgress" style="width: 0%;"></div>
+                    </div>
+                    <span class="hero-percent" id="totalFanPercentText">0%</span>
+                </div>
+                <div style="margin-top: 30px; display:flex; gap:50px; text-align:center;">
+                    <div>
+                        <p style="font-size:12px; color:#9d8e90; text-transform:uppercase;">Total Target</p>
+                        <p style="font-size:24px; font-family:'Playfair Display', serif;" id="displayTotalTarget">100,000,000</p>
+                    </div>
+                    <div>
+                        <p style="font-size:12px; color:#9d8e90; text-transform:uppercase;">Remaining</p>
+                        <p style="font-size:24px; font-family:'Playfair Display', serif;" id="displayRemaining">100,000,000</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column Top (Growth Chart) -->
+            <div class="side-card glass-panel chart-panel" id="statsCard">
+                <div class="card-header">
+                    <h3>Fan Count Growth</h3>
+                    <p>サークル全体の累積ファン数</p>
+                </div>
+                <!-- Canvas container needs careful sizing -->
+                <div style="position:relative; height: 180px; width: 100%;">
+                    <canvas id="growthChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Right Column Middle (Members) -->
+            <div class="side-card glass-panel members-panel" id="membersCard">
+                <div class="card-header">
+                    <h3>Circle Members</h3>
+                    <p>サークルメンバー (クリックで詳細表示)</p>
+                </div>
+                <div class="members-grid-mini" id="membersGrid">
+                    <!-- JS injects members here -->
+                </div>
+            </div>
+
+            <!-- Bottom Left (Data Upload Area) -->
+            <div class="bottom-card glass-panel" id="dropzone">
+                <div class="card-header">
+                    <h3>Data Upload (Screenshot)</h3>
+                    <p>Alt+PrtSc で撮影後、この画面で Ctrl+V すぐに送信されます</p>
+                </div>
+                <div id="uploadInner" style="text-align:center; padding: 20px; color:#9d8e90;">
+                    <span class="material-icons-outlined" style="font-size:40px;">cloud_upload</span>
+                    <p style="margin-top:10px; font-weight:bold;">Waiting for Paste...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin Settings Modal -->
+    <div id="admin-modal" class="modal-overlay hidden">
+        <div class="modal-content glass-panel" style="width: 500px; max-width: 90%;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 20px;">
+                <h2 style="font-family:'Playfair Display', serif;">Administrator Settings</h2>
+                <span class="material-icons-outlined close-modal" id="closeAdmin" style="cursor:pointer;">close</span>
+            </div>
+            
+            <div style="margin-bottom: 20px;">
+                <label style="font-size:14px; font-weight:bold; color:var(--text-muted);">今月の目標総ファン数 (サークル全体)</label>
+                <input type="number" id="adminTotalTarget" class="glass-input" style="margin-top:5px;" value="100000000">
+            </div>
+
+            <div style="margin-bottom: 20px;">
+                <label style="font-size:14px; font-weight:bold; color:var(--text-muted);">個別の目標ファン数設定</label>
+                <div id="adminMemberList" style="max-height: 180px; overflow-y: auto; background: rgba(0,0,0,0.03); padding: 15px; border-radius: 10px; margin-top:5px;">
+                    <!-- JS injects checkboxes -->
+                </div>
+            </div>
+
+            <div style="margin-bottom: 20px;">
+                <label style="font-size:12px; color:var(--text-muted);">※上記でチェックを入れたメンバーの目標値を一括設定</label>
+                <div style="display:flex; gap:10px; margin-top:5px;">
+                    <input type="number" id="adminIndividualTarget" class="glass-input" value="3000000">
+                    <button class="glass-btn primary" id="applyIndividualTargetBtn" style="white-space:nowrap;">適用する</button>
+                </div>
+            </div>
+            
+            <button class="glass-btn primary" id="saveAdminBtn" style="width:100%; margin-top:10px;">全体設定を保存</button>
+        </div>
+    </div>
+
+    <!-- Member Details Drawer -->
+    <div id="member-drawer-overlay" class="modal-overlay hidden">
+        <div id="section-member-details" class="glass-panel" style="position:absolute; left:0; top:0; width:450px; height:100%; border-radius:0 30px 30px 0; overflow-y:auto; transform:translateX(-100%); transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);">
+            <div style="display:flex; justify-content:flex-end;">
+                <span class="material-icons-outlined" id="close-drawer-btn" style="cursor:pointer; font-size:30px;">close</span>
+            </div>
+            <h1 style="font-family:'Playfair Display', serif; font-size:32px; color:#4a282f; margin-bottom:30px;">Member Data</h1>
+            
+            <div style="display:flex; flex-direction:column; align-items:center; gap:20px;">
+                <div id="detail-avatar" style="width:120px; height:120px; border-radius:50%; background:#eee; background-size:cover; display:flex; align-items:center; justify-content:center; font-size:60px; box-shadow: 0 5px 15px rgba(0,0,0,0.1);"></div>
+                <button class="glass-btn" id="changeMemberIconBtn" style="font-size:12px; padding:5px 15px;">サムネを変更</button>
+                <input type="file" id="memberIconUpload" style="display:none;" accept="image/*">
+                <h2 id="detail-name" style="font-size:28px; font-weight:bold; color:#4a282f;">Loading...</h2>
+            </div>
+            
+            <div style="margin-top:40px; padding:20px; background:rgba(255,255,255,0.6); border-radius:20px;">
+                <p style="color:#9d8e90; font-size:14px;">獲得ファン数 / 個別目標</p>
+                <p style="color:#fba1ba; font-size:24px; font-weight:bold;" id="detail-fan">0 / 0</p>
+                <div style="width:100%; height:10px; background:#eee; border-radius:5px; margin-top:10px; overflow:hidden;">
+                    <div id="detail-progress" style="height:100%; background:linear-gradient(90deg, #fba1ba, #e0c384); width:0%;"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="main.js"></script>
+</body>
+</html>
