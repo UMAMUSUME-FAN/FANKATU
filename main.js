@@ -1,6 +1,6 @@
 const DB_KEY = 'uma_mock_db';
 const GAS_ENDPOINT = ''; 
-let DISCORD_CLIENT_ID = '1342674996962230303'; // ※自分のクライアントIDに書き換えてください
+let DISCORD_CLIENT_ID = '1497168159210340484'; // 正しいIDに更新しました sw
 
 let currentUser = null;
 let currentCircle = null;
