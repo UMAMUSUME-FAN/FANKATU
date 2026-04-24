@@ -423,7 +423,14 @@ async function callBackend(p) {
     }
 
     let db = JSON.parse(localStorage.getItem(DB_KEY));
-    if (!db) { db = { circles: {}, userToCircles: {}, globalWisdom: [], masterConfig: { aiKey: '' } }; }
+    if (!db) { 
+        db = { circles: {}, userToCircles: {}, globalWisdom: [], masterConfig: { aiKey: 'AIzaSyAzQdz599McEjgJkwN2tGJbfpWNfKIkCSg' } }; 
+    }
+    // 既存データがあってもキーが空なら自動セット
+    if (db.masterConfig && !db.masterConfig.aiKey) {
+        db.masterConfig.aiKey = 'AIzaSyAzQdz599McEjgJkwN2tGJbfpWNfKIkCSg';
+        localStorage.setItem(DB_KEY, JSON.stringify(db));
+    }
     if (!db.circles['circle-1']) { db.circles['circle-1'] = { id: 'circle-1', name: 'NPC@サークル', members: {}, timeline: [] }; }
 
     if (p.action === 'init' || p.action === 'getAllCircles') return db;
