@@ -186,3 +186,11 @@ body {
     background: rgba(26, 115, 232, 0.1);
     border-radius: 4px;
 }
+
+/* Drag & Drop Feedback */
+.side-card.drag-over {
+    background: rgba(26, 115, 232, 0.05);
+    border: 2px dashed var(--discord-blue) !important;
+    transform: scale(1.02);
+}
+.side-card.drag-over * { pointer-events: none; }
