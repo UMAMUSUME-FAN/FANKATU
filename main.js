@@ -329,13 +329,34 @@ document.addEventListener('DOMContentLoaded', () => {
         const mgrid = document.getElementById('membersGrid');
         mgrid.innerHTML = '';
         const frozen = db.frozen || {};
-        db.members.forEach(m => {
+
+        // 管理者モードの場合、ファン数が多い順にソート（管理者のみの特典）
+        let sortedMembers = [...db.members];
+        if (window.isAdminLogin) {
+            sortedMembers.sort((a, b) => (db.fans[b.memberId] || 0) - (db.fans[a.memberId] || 0));
+        }
+
+        sortedMembers.forEach(m => {
             if (frozen[m.memberId]) return; // 凍結されたメンバーはダッシュボードに表示しない
             
             const mdiv = document.createElement('div');
             mdiv.className = 'member-avatar-mini';
             if (m.icon) mdiv.style.backgroundImage = `url('${m.icon}')`;
             else mdiv.innerHTML = m.name.charAt(0);
+
+            // ✨ 管理者のみ、目標達成度・獲得量に応じた「赤い縁（オーラ）」の演出が見える
+            if (window.isAdminLogin) {
+                const myCurrent = db.fans[m.memberId] || 0;
+                const myTarget = db.individualTargets[m.memberId] || 3000000;
+                const progressRatio = Math.min(1, Math.max(0, myCurrent / myTarget)); // 0.0〜1.0
+
+                if (progressRatio > 0.01) { 
+                    const alpha = (progressRatio * 0.85 + 0.15).toFixed(2);
+                    const borderSize = progressRatio > 0.5 ? 3 : 2;
+                    mdiv.style.border = `${borderSize}px solid rgba(220, 20, 60, ${alpha})`;
+                    mdiv.style.boxShadow = `0 0 ${progressRatio * 25}px rgba(220, 20, 60, ${alpha})`;
+                }
+            }
             
             mdiv.onclick = () => {
                 // 自分自身か、管理者ログイン状態の時のみ詳細画面を開ける
@@ -507,6 +528,14 @@ document.addEventListener('DOMContentLoaded', () => {
         return new Promise(res => {
             setTimeout(() => {
                 let db = JSON.parse(localStorage.getItem(DB_KEY) || '{"members":[], "fans":{}, "individualTargets":{}, "totalTarget":100000000}');
+                
+                // --- 月初めの全ファン数自動リセット機能 ---
+                const currentMonth = new Date().getMonth() + 1;
+                if (db.lastResetMonth && db.lastResetMonth !== currentMonth) {
+                    db.fans = {}; // 全員の獲得ファン数をゼロに
+                }
+                db.lastResetMonth = currentMonth;
+                localStorage.setItem(DB_KEY, JSON.stringify(db)); // 判定後上書き保存
                 if (data.action === 'discord_login') {
                     let m = db.members.find(x => x.memberId === data.memberId);
                     if (!m) {
