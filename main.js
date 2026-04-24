@@ -3,14 +3,16 @@ const GAS_ENDPOINT = 'https://script.google.com/macros/s/AKfycbwYkegOnemTtYiFOLB
 let DISCORD_CLIENT_ID = '1497168159210340484';
 const AI_KEY = 'AIzaSyAzQdz599McEjgJkwN2tGJbfpWNfKIkCSg';
 
+// バージョン情報 (キャッシュ回避のため)
+const APP_VERSION = '1.0.8'; 
+
 let currentUser = null;
 let currentCircle = null;
 
-// --- Helper Functions ---
 function showToast(m, t='success'){ 
     const s=document.getElementById('toast'); if(!s) return; 
     s.textContent=m; s.className=`toast show ${t}`; 
-    setTimeout(()=>s.classList.remove('show'),3000); 
+    setTimeout(()=>s.classList.remove('show'),4000); 
 }
 
 async function callBackend(p) {
@@ -21,8 +23,7 @@ async function callBackend(p) {
     } catch (e) { return null; }
 }
 
-// 解析精度向上のため、1280pxまで高画質化
-async function resizeImage(base64Str, maxWidth = 1280) {
+async function resizeImage(base64Str, maxWidth = 1200) {
     return new Promise((resolve) => {
         const img = new Image(); img.src = base64Str;
         img.onload = () => {
@@ -30,20 +31,21 @@ async function resizeImage(base64Str, maxWidth = 1280) {
             let w = img.width; let h = img.height;
             if (w > maxWidth) { h = h * (maxWidth / w); w = maxWidth; }
             canvas.width = w; canvas.height = h;
-            const ctx = canvas.getContext('2d');
+            const ctx = canvas.getContext('2d', { alpha: false });
+            ctx.fillStyle = "#FFFFFF"; ctx.fillRect(0,0,w,h);
             ctx.drawImage(img, 0, 0, w, h);
-            resolve(canvas.toDataURL('image/jpeg', 0.85)); // 画質を85%にアップ
+            resolve(canvas.toDataURL('image/jpeg', 0.8)); 
         };
     });
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
+    console.log(`UMA Tracker v${APP_VERSION} Started`);
     const appWrapper = document.getElementById('appWrapper');
     const authOverlay = document.getElementById('authOverlay');
     const portalOverlay = document.getElementById('circleSelectionOverlay');
     const heroCard = document.getElementById('heroCard');
 
-    // --- Auth check ---
     const params = new URLSearchParams(window.location.hash.substring(1));
     const token = params.get('access_token');
     if (token) {
@@ -112,84 +114,94 @@ document.addEventListener('DOMContentLoaded', async () => {
     window.joinCircle = async cid => { await callBackend({ action: 'joinCircle', circleId: cid }); renderPortalCircles(); };
     window.leaveCircle = async (cid, n) => { if(confirm(`『${n}』から脱退しますか？`)) { await callBackend({ action:'leaveCircle', circleId: cid }); renderPortalCircles(); } };
 
-    // --- 高精度AI解析 ---
-    async function handleImageUpload(file) {
+    // --- 全自動解析 (AUTO-MODE) ---
+    async function handleAutoPost(file) {
         if(!file || !file.type.startsWith('image/')) return;
-        showToast("AIが高画質解析中...🎥");
+        showToast("掲示板にアップロード中...🚀");
         
         const reader = new FileReader();
         reader.onload = async (ev) => {
-            const smallBase64 = await resizeImage(ev.target.result, 1280); 
-            const pureBase64 = smallBase64.split(',')[1];
-
-            try {
-                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${AI_KEY}`, {
-                    method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        contents: [{ parts: [
-                            { text: "ウマ娘のプロフィール画面です。ここから『ファン 総獲得数』の右隣に書かれている数字だけを抽出して。読み間違えないように慎重に。カンマは不要。数字以外の文字は1文字も答えないで。" },
-                            { inline_data: { mime_type: "image/jpeg", data: pureBase64 } }
-                        ]}]
-                    })
-                });
-                const res = await response.json();
-                if (!res.candidates) throw new Error("AIが画像を認識できませんでした");
-                
-                const rawText = res.candidates[0].content.parts[0].text.trim();
-                const aiFans = rawText.replace(/[^0-9]/g, ''); // 数字以外を徹底排除
-                
-                if(!aiFans) throw new Error("画像から数字が見つかりませんでした");
-
-                const fans = parseInt(aiFans);
-                const confirmedFans = prompt(`AIは「${fans.toLocaleString()}」ファンだと読み取りました。\n合っていればOK、違っていれば修正してください。`, fans);
-                
-                if (confirmedFans !== null) {
-                    const finalFans = parseInt(confirmedFans.replace(/,/g, ''));
-                    showToast("同期中...");
-                    await callBackend({ action: 'updateFans', circleId: currentCircle.id, fans: finalFans });
-                    await callBackend({ action: 'postTimeline', circleId: currentCircle.id, text: `AI解析：ファン数${finalFans.toLocaleString()}`, images: [smallBase64] });
-                    showToast("更新完了！🏆");
-                    updateDashboard();
-                }
-            } catch(e) {
-                showToast(`解析失敗: ${e.message}`, "error");
-            }
+            const rawBase64 = ev.target.result;
+            const smallBase64 = await resizeImage(rawBase64, 1200); 
+            await callBackend({ 
+                action: 'postTimeline', 
+                circleId: currentCircle.id, 
+                text: "ファン数記録を投稿しました", 
+                images: [smallBase64] 
+            });
+            showToast("掲示板にアップ完了！解析を継続します...");
+            updateDashboard();
+            requestAutoAnalysis(smallBase64);
         };
         reader.readAsDataURL(file);
     }
 
+    async function requestAutoAnalysis(base64Data) {
+        showToast("AIがファン数を読み取り中...🔍", "info");
+        const pureBase64 = base64Data.split(',')[1];
+        try {
+            const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${AI_KEY}`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [
+                        { text: "ウマ娘の画面です。『ファン』という文字の周辺、特に『総獲得数』の右端にある数字だけを抽出して。カンマは不要。数字以外は絶対に答えないで。どうしても数字が見つからない場合のみ 'NONE' と答えて。" },
+                        { inline_data: { mime_type: "image/jpeg", data: pureBase64 } }
+                    ]}]
+                })
+            });
+            const res = await response.json();
+            if (res.error) throw new Error(res.error.message);
+            if (!res.candidates || res.candidates.length === 0) throw new Error("AIが回答を拒否しました（安全制限等）");
+            
+            const rawText = res.candidates[0].content.parts[0].text.trim();
+            if(rawText === 'NONE') throw new Error("画像から数字を特定できませんでした");
+
+            const fansString = rawText.replace(/[^0-9]/g, '');
+            if(!fansString) throw new Error("有効な数字が見つかりませんでした");
+
+            const fans = parseInt(fansString);
+            await callBackend({ action: 'updateFans', circleId: currentCircle.id, fans: fans });
+            showToast(`成功！ ${fans.toLocaleString()} ファンを更新しました📈`);
+            updateDashboard();
+        } catch(e) {
+            console.error("OCR Error:", e);
+            showToast(`解析失敗：${e.message}`, "error");
+        }
+    }
+
     window.addEventListener('paste', e => {
         const item = Array.from(e.clipboardData.items).find(i => i.type.startsWith('image'));
-        if(item) handleImageUpload(item.getAsFile());
+        if(item) handleAutoPost(item.getAsFile());
     });
     if(heroCard) {
         heroCard.ondragover = e => e.preventDefault();
-        heroCard.ondrop = e => { e.preventDefault(); handleImageUpload(e.dataTransfer.files[0]); };
+        heroCard.ondrop = e => { e.preventDefault(); handleAutoPost(e.dataTransfer.files[0]); };
         heroCard.onclick = () => {
             const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*';
-            inp.onchange = e => handleImageUpload(e.target.files[0]);
+            inp.onchange = e => handleAutoPost(e.target.files[0]);
             inp.click();
         };
     }
 
-    // --- Dashboard UI Update ---
+    // --- Dashboard UI ---
     async function updateDashboard() {
         const db = await callBackend({ action: 'getCircleData', circleId: currentCircle.id });
         if(!db) return;
         currentCircle = db.circles[currentCircle.id];
         const c = currentCircle;
-        const my = c.members[currentUser?.id] || { totalFans: 0, targetFans: 3000000, history: [] };
+        const uid = currentUser?.id;
+        const my = (c.members && uid) ? c.members[uid] : { totalFans: 0, targetFans: 3000000, history: [] };
         
         document.querySelector('.circle-name-display').textContent = c.name;
-        document.getElementById('displayTotalTarget').textContent = (my.targetFans || 0).toLocaleString();
-        document.getElementById('displayRemaining').textContent = Math.max(0, (my.targetFans || 0) - my.totalFans).toLocaleString();
-        document.getElementById('totalFanProgress').style.width = Math.min(100, (my.totalFans / (my.targetFans || 1)) * 100) + '%';
-        document.getElementById('totalFanPercentText').textContent = Math.floor((my.totalFans / (my.targetFans || 1)) * 100) + '%';
+        document.getElementById('displayTotalTarget').textContent = (my.targetFans || 3000000).toLocaleString();
+        document.getElementById('displayRemaining').textContent = Math.max(0, (my.targetFans || 3000000) - (my.totalFans || 0)).toLocaleString();
+        document.getElementById('totalFanProgress').style.width = Math.min(100, ((my.totalFans || 0) / (my.targetFans || 3000000)) * 100) + '%';
+        document.getElementById('totalFanPercentText').textContent = Math.floor(((my.totalFans || 0) / (my.targetFans || 3000000)) * 100) + '%';
         
         document.getElementById('userNameDisplay').textContent = currentUser?.name || "Member";
         if(currentUser?.avatar) document.getElementById('userAvatar').style.backgroundImage = `url('${currentUser.avatar}')`;
 
-        renderTimeline(c.timeline); renderGrowthChart(my.history); renderMembers(c.members);
+        renderTimeline(c.timeline); renderGrowthChart(my.history || [0]); renderMembers(c.members);
     }
 
     function renderTimeline(posts) {
@@ -198,7 +210,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         (posts || []).slice().reverse().forEach(p => {
             const div = document.createElement('div'); div.className = 'timeline-item';
             div.innerHTML = `<div class="timeline-header">${p.userName} <span style="font-size:10px; opacity:0.5; float:right;">${p.time || ''}</span></div><div class="timeline-content">${p.text}</div>`;
-            if(p.images?.length > 0) div.innerHTML += `<img src="${p.images[0]}" style="width:120px; border-radius:10px; margin-top:10px; cursor:zoom-in;" onclick="window.open('${p.images[0]}')">`;
+            if(p.images?.length > 0) {
+                const imgStr = p.images[0];
+                div.innerHTML += `<div style="margin-top:10px;"><img src="${imgStr}" style="width:140px; border-radius:10px; cursor:zoom-in;" onclick="window.open('${imgStr}')"></div>`;
+            }
             list.appendChild(div);
         });
     }
@@ -208,7 +223,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         g.innerHTML = '';
         Object.values(mbs || {}).forEach(m => {
             const d = document.createElement('div'); d.className = 'member-avatar-mini';
-            if(m.icon) d.style.backgroundImage = `url('${m.icon}')`; else d.textContent = m.name.substring(0,1);
+            if(m.icon) d.style.backgroundImage = `url('${m.icon}')`; else d.textContent = m.name?.substring(0,1) || '?';
             g.appendChild(d);
         });
     }
