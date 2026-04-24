@@ -167,6 +167,11 @@
                 <input type="text" id="adminDiscordWebhook" class="glass-input" style="margin-top:5px;" placeholder="https://discord.com/api/webhooks/...">
                 <p style="font-size:11px; margin-top:3px; color:var(--text-muted);">※Discordのチャンネル設定 > 連携サービス > ウェブフックからURLを作成して貼り付けてください。</p>
             </div>
+
+            <div style="margin-bottom: 20px; border-top: 1px solid rgba(0,0,0,0.1); padding-top: 20px;">
+                <label style="font-size:14px; font-weight:bold; color:var(--text-muted);">管理者パスワードの変更</label>
+                <input type="text" id="adminPassInput" class="glass-input" style="margin-top:5px;" placeholder="新しいパスワード（空欄の場合は変更なし）">
+            </div>
             
             <button class="glass-btn primary" id="saveAdminBtn" style="width:100%; margin-top:10px;">全体設定を保存</button>
         </div>
@@ -192,6 +197,14 @@
                 <p style="color:#fba1ba; font-size:24px; font-weight:bold;" id="detail-fan">0 / 0</p>
                 <div style="width:100%; height:10px; background:#eee; border-radius:5px; margin-top:10px; overflow:hidden;">
                     <div id="detail-progress" style="height:100%; background:linear-gradient(90deg, #fba1ba, #e0c384); width:0%;"></div>
+                </div>
+            </div>
+
+            <!-- Member Daily Chart -->
+            <div style="margin-top:20px; padding:20px; background:rgba(255,255,255,0.6); border-radius:20px;">
+                <p style="color:#9d8e90; font-size:14px; margin-bottom:10px;">今月のファン数変動グラフ</p>
+                <div style="position:relative; height: 180px; width: 100%;">
+                    <canvas id="memberDailyChart"></canvas>
                 </div>
             </div>
         </div>

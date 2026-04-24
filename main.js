@@ -77,14 +77,40 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    // --- Admin Modal Setup ---
+    // --- Admin Modal Setup & Navigation ---
     const adminModal = document.getElementById('admin-modal');
     window.discordWebhookUrl = '';
 
+    // ① トップナビゲーション・サイドナビの「スムーズスクロール」機能
+    document.querySelectorAll('.nav-link, .nav-symbol').forEach(el => {
+        el.addEventListener('click', (e) => {
+            e.preventDefault();
+            const tid = el.currentTarget.getAttribute('data-target');
+            if (tid && document.getElementById(tid)) {
+                // スムーズスクロール
+                document.getElementById(tid).scrollIntoView({ behavior: 'smooth', block: 'center' });
+                // アクティブ状態を示すクラスの切り替え
+                document.querySelectorAll('.nav-link, .nav-symbol').forEach(x => x.classList.remove('active'));
+                document.querySelectorAll(`[data-target="${tid}"]`).forEach(x => x.classList.add('active'));
+            }
+        });
+    });
+
+    // ② 管理者ボタンにパスワード認証を搭載
     document.getElementById('adminBtn').onclick = async () => {
         const res = await callBackend({ action: 'get_db' });
+        
+        // 管理者パスワード入力画面 (初期パスワードは admin)
+        const currentAdminPass = res.db.adminPass || 'admin';
+        const entered = prompt('管理者パスワードを入力してください (初期設定: admin)');
+        if (entered !== currentAdminPass) {
+            alert('パスワードが違います！');
+            return;
+        }
+
         document.getElementById('adminTotalTarget').value = res.db.totalTarget || 100000000;
         document.getElementById('adminDiscordWebhook').value = res.db.discordWebhook || '';
+        document.getElementById('adminPassInput').value = '';
         const listDiv = document.getElementById('adminMemberList');
         listDiv.innerHTML = '';
         res.db.members.forEach(m => {
@@ -218,7 +244,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.getElementById('detail-fan').textContent = `${currF.toLocaleString()} / ${tarF.toLocaleString()}`;
                 document.getElementById('detail-progress').style.width = Math.min(100, (currF/tarF)*100) + '%';
                 
+                activeDrawerMemberId = m.memberId;
                 document.getElementById('member-drawer-overlay').classList.remove('hidden');
+                
+                // 個人ごとのファン数増加グラフを描画
+                drawMemberChart(m.memberId, currF);
             };
             
             const wrap = document.createElement('div');
@@ -231,7 +261,7 @@ document.addEventListener('DOMContentLoaded', () => {
         drawChart();
     }
 
-    // --- Chart ---
+    // --- Chart: Circle Total ---
     let myChart = null;
     function drawChart() {
         const ctx = document.getElementById('growthChart');
@@ -241,6 +271,59 @@ document.addEventListener('DOMContentLoaded', () => {
             type: 'line',
             data: { labels: ['Nov', 'Dec', 'Jan', 'Feb', 'Mar', 'Now'], datasets: [{ data: [20, 32, 48, 60, 72, 85], borderColor: '#fba1ba', backgroundColor: 'rgba(251, 161, 186, 0.2)', fill: true, tension: 0.4 }] },
             options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { display: true }, y: { display: false } } }
+        });
+    }
+
+    // --- Chart: Individual Member ---
+    let memberChartInstance = null;
+    function drawMemberChart(memberId, currentFans) {
+        const ctx = document.getElementById('memberDailyChart');
+        if (!ctx) return;
+        if (memberChartInstance) memberChartInstance.destroy();
+        
+        // （本来はDBの履歴を使う場面ですが、今回は現在のファン数を基準に、過去1ヶ月分をシミュレーション推移して描画します）
+        let baseFans = currentFans * 0.4;
+        let step = (currentFans - baseFans) / 5;
+        const dataPoints = [
+            Math.floor(baseFans), 
+            Math.floor(baseFans + step), 
+            Math.floor(baseFans + step*2), 
+            Math.floor(baseFans + step*3), 
+            Math.floor(baseFans + step*4), 
+            currentFans
+        ];
+        
+        memberChartInstance = new Chart(ctx, {
+            type: 'line',
+            data: { 
+                labels: ['1週目', '2週目', '3週目', '4週目', '昨日', '今日'], 
+                datasets: [{ 
+                    label: 'ファン数',
+                    data: dataPoints, 
+                    borderColor: '#fba1ba', 
+                    backgroundColor: 'rgba(251, 161, 186, 0.2)', 
+                    fill: true, 
+                    tension: 0.4,
+                    pointRadius: 4,
+                    pointBackgroundColor: '#fff'
+                }] 
+            },
+            options: { 
+                responsive: true, 
+                maintainAspectRatio: false, 
+                plugins: { legend: { display: false } }, 
+                scales: { 
+                    x: { display: true }, 
+                    y: { 
+                        display: true,
+                        ticks: {
+                            callback: function(value) {
+                                return value >= 10000 ? (value/10000) + '万' : value;
+                            }
+                        }
+                     } 
+                } 
+            }
         });
     }
 
