@@ -1,6 +1,7 @@
 const GAS_ENDPOINT = ''; 
 const DB_KEY = 'uma_mock_db';
 let currentUser = null;
+let activeDrawerMemberId = null;
 
 document.addEventListener('DOMContentLoaded', () => {
     const authOverlay = document.getElementById('authOverlay');
@@ -118,17 +119,30 @@ document.addEventListener('DOMContentLoaded', () => {
         listDiv.innerHTML = '';
         res.db.members.forEach(m => {
             const currTarget = res.db.individualTargets[m.memberId] || 3000000;
+            const isFrozen = res.db.frozen && res.db.frozen[m.memberId];
             listDiv.innerHTML += `
-                <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #eee; padding:5px 0;">
+                <div style="display:flex; justify-content:space-between; align-items:center; border-bottom:1px solid #eee; padding:5px 0; ${isFrozen ? 'opacity:0.5;' : ''}">
                     <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
                         <input type="checkbox" class="admin-member-check" value="${m.memberId}">
-                        <span>${m.name}</span>
+                        <span style="${isFrozen ? 'text-decoration:line-through;' : ''}">${m.name}</span>
                     </label>
-                    <span style="font-size:12px; color:var(--primary);" class="ind-target-display" data-id="${m.memberId}">${currTarget.toLocaleString()}</span>
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <span style="font-size:12px; color:var(--primary);" class="ind-target-display" data-id="${m.memberId}">${currTarget.toLocaleString()}</span>
+                        <button onclick="window.toggleFreeze('${m.memberId}')" style="font-size:10px; padding:2px 5px; border-radius:5px; border:1px solid ${isFrozen ? '#4CAF50' : '#fba1ba'}; background:transparent; color:${isFrozen ? '#4CAF50' : '#fba1ba'}; cursor:pointer;">
+                            ${isFrozen ? '復帰' : '凍結'}
+                        </button>
+                    </div>
                 </div>
             `;
         });
         adminModal.classList.remove('hidden');
+    };
+
+    // グローバル関数: アカウント凍結切り替え
+    window.toggleFreeze = async (memberId) => {
+        await callBackend({ action: 'toggle_freeze', memberId: memberId });
+        document.getElementById('adminBtn').click(); // リスト再描画
+        refreshDashboard();
     };
     document.getElementById('closeAdmin').onclick = () => adminModal.classList.add('hidden');
 
@@ -247,7 +261,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const mgrid = document.getElementById('membersGrid');
         mgrid.innerHTML = '';
+        const frozen = db.frozen || {};
         db.members.forEach(m => {
+            if (frozen[m.memberId]) return; // 凍結されたメンバーはダッシュボードに表示しない
+            
             const mdiv = document.createElement('div');
             mdiv.className = 'member-avatar-mini';
             if (m.icon) mdiv.style.backgroundImage = `url('${m.icon}')`;
@@ -413,6 +430,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     localStorage.setItem(DB_KEY, JSON.stringify(db)); res({success:true, detectedFans: 150000});
                 }
                 else if (data.action === 'get_db') { res({success:true, db: db}); }
+                else if (data.action === 'toggle_freeze') {
+                    db.frozen = db.frozen || {};
+                    db.frozen[data.memberId] = !db.frozen[data.memberId];
+                    localStorage.setItem(DB_KEY, JSON.stringify(db)); res({success:true});
+                }
                 else if (data.action === 'save_admin') {
                     db.totalTarget = data.totalTarget;
                     db.discordWebhook = data.discordWebhook;
