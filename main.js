@@ -379,7 +379,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const statsBtn = document.getElementById('statsBtn'); if(statsBtn) statsBtn.onclick = (e) => { e.preventDefault(); const m = document.getElementById('masterStatsOverlay'); if(m) m.classList.remove('hidden'); generateAIAnalysis(); };
     const closeStats = document.getElementById('closeStatsBtn'); if(closeStats) closeStats.onclick = () => { const m = document.getElementById('masterStatsOverlay'); if(m) m.classList.add('hidden'); };
     const switchBtn = document.getElementById('switchCircleBtn'); if(switchBtn) switchBtn.onclick = showPortal;
-    const adminBtn = document.getElementById('adminBtn'); if(adminBtn) adminBtn.onclick = (e) => { e.preventDefault(); const p = prompt('Leader PW:'); if(p === currentCircle.adminPass) { const am = document.getElementById('admin-modal'); if(am) am.classList.remove('hidden'); } };
+    const adminBtn = document.getElementById('adminBtn'); if(adminBtn) adminBtn.onclick = (e) => { e.preventDefault(); const am = document.getElementById('admin-modal'); if(am) am.classList.remove('hidden'); };
 
     // --- Core Functions ---
     function renderGrowthChart() {

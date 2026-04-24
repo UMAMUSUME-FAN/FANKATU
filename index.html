@@ -75,7 +75,7 @@
             </div>
             <a href="#" class="nav-link active" data-target="home"><span class="material-icons-outlined">home</span><div class="nav-text"><span>Home</span><span class="sub">ホーム</span></div></a>
             <a href="#" class="nav-link" id="statsBtn"><span class="material-icons-outlined">analytics</span><div class="nav-text"><span>Stats</span><span class="sub">分析・AI</span></div></a>
-            <a href="#" class="nav-link" id="adminBtn"><span class="material-icons-outlined">settings_applications</span><div class="nav-text"><span>Manage</span><span class="sub">サークル管理</span></div></a>
+            <a href="#" class="nav-link" id="adminBtn"><span class="material-icons-outlined">settings</span><div class="nav-text"><span>Settings</span><span class="sub">各種設定</span></div></a>
             <div class="nav-actions">
                 <a href="#" id="masterAdminBtn" class="text-link" style="margin-right:15px; opacity:0.3;"><span class="material-icons-outlined" style="font-size:16px;">security</span></a>
                 <a href="guide.html" target="_blank" class="text-link" style="margin-right:15px; font-size:11px;"><span class="material-icons-outlined" style="font-size:16px;">help_outline</span> ガイド</a>
@@ -209,24 +209,39 @@
         </div>
     </div>
 
-    <!-- Other Modals (Admin, etc.) same as before but simplified -->
+    <!-- Settings Modal (Was Admin Modal) -->
     <div id="admin-modal" class="modal-overlay hidden">
         <div class="glass-panel" style="width:500px; padding:30px;">
             <div class="modal-header">
-                <h3><span class="material-icons-outlined">settings</span> Leader Settings</h3>
+                <h3><span class="material-icons-outlined">settings</span> サークル管理設定</h3>
                 <span id="closeAdmin" class="material-icons-outlined" style="cursor:pointer;">close</span>
             </div>
-            <p style="font-size:11px; color:var(--text-muted); margin-bottom:20px;">※サークルリーダー（部長級）限定の設定パネルです。</p>
+            <p style="font-size:11px; color:var(--text-muted); margin-bottom:20px;">※サークルのリーダー（部長級）や管理者が設定を変更するパネルです。</p>
 
             <div class="scroll-list" style="height:400px; padding-right:10px;">
-                <div class="form-group"><label>Circle Name</label><input type="text" id="adminCircleNameInput" class="glass-input"></div>
-                <div class="form-group"><label>Approved Join Requests</label><div id="adminJoinRequests" class="inner-box"></div></div>
-                <div class="form-group"><label>Individual Targets</label><div id="adminMemberList" class="inner-box"></div><div style="display:flex; gap:10px; margin-top:10px;"><input type="number" id="adminIndividualTarget" class="glass-input" value="3000000"><button id="applyIndividualTargetBtn" class="glass-btn primary">Update</button></div></div>
+                <div class="form-group"><label>サークル名</label><input type="text" id="adminCircleNameInput" class="glass-input" placeholder="サークル名を入力"></div>
+                <div class="form-group"><label>承認済みの参加申請</label><div id="adminJoinRequests" class="inner-box" style="font-size:12px; color:var(--text-muted);">承認済みのメンバーが表示されます。</div></div>
+                <div class="form-group">
+                    <label>メンバーの個別目標（ノルマ）</label>
+                    <div id="adminMemberList" class="inner-box"></div>
+                    <div style="display:flex; gap:10px; margin-top:10px;">
+                        <input type="number" id="adminIndividualTarget" class="glass-input" value="3000000">
+                        <button id="applyIndividualTargetBtn" class="glass-btn primary" style="width:120px;">一括更新</button>
+                    </div>
+                </div>
 
-                <div class="form-group"><label>Webhook</label><input type="text" id="adminDiscordWebhook" class="glass-input"></div>
-                <div class="form-group"><label>Security</label><div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;"><input type="text" id="adminIdInput" placeholder="New ID" class="glass-input"><input type="text" id="adminPassInput" placeholder="New PW" class="glass-input"></div></div>
+                <div class="form-group"><label>Discord連携 (Webhook URL)</label><input type="text" id="adminDiscordWebhook" class="glass-input" placeholder="https://discord.com/api/webhooks/..."></div>
+                <div class="form-group">
+                    <label>セキュリティ設定 (ID/PW)</label>
+                    <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                        <input type="text" id="adminIdInput" placeholder="新しい管理者ID" class="glass-input">
+                        <input type="text" id="adminPassInput" placeholder="新しいパスワード" class="glass-input">
+                    </div>
+                </div>
             </div>
-            <button id="saveAdminBtn" class="glass-btn primary" style="width:100%; margin-top:20px;">Save All</button>
+            <button id="saveAdminBtn" class="glass-btn primary" style="width:100%; margin-top:20px; padding:15px;">
+                <span class="material-icons-outlined" style="margin-right:8px;">save</span> すべての設定を保存する
+            </button>
         </div>
     </div>
 
