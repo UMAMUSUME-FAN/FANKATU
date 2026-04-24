@@ -133,14 +133,46 @@ document.addEventListener('DOMContentLoaded', async () => {
         const area = document.getElementById('aiWisdomContent');
         const db = await callBackend({ action: 'getAllCircles' });
         const wisdom = db.globalWisdom || [];
-        if (wisdom.length === 0) { area.innerHTML = "全国から攻略情報を『継承』し、自動でWiki化中..."; return; }
+        
+        // --- Trending Hashtags Extraction ---
+        let allTags = [];
+        Object.values(db.circles).forEach(c => {
+            (c.timeline || []).forEach(p => {
+                const tags = p.text.match(/#(\S+)/g);
+                if(tags) allTags.push(...tags);
+            });
+        });
+        const tagCounts = allTags.reduce((acc, t) => (acc[t] = (acc[t] || 0) + 1, acc), {});
+        const sortedTags = Object.entries(tagCounts).sort((a,b) => b[1] - a[1]).slice(0, 8);
+
+        let tagsHtml = `<div style="margin-bottom:20px; display:flex; flex-wrap:wrap; gap:8px;">`;
+        sortedTags.forEach(([tag]) => {
+            tagsHtml += `<span class="hashtag" style="font-size:11px; background:rgba(26, 115, 232, 0.08); padding:4px 10px; border-radius:12px; border:1px solid rgba(26, 115, 232, 0.2);">${tag}</span>`;
+        });
+        tagsHtml += `</div><div style="height:1px; background:rgba(0,0,0,0.05); margin-bottom:15px;"></div>`;
+
+        if (wisdom.length === 0) {
+            area.innerHTML = tagsHtml + "全国から攻略情報を『継承』し、自動でWiki化中..."; return;
+        }
+        
         const cats = { 'ステータス': 'trending_up', '脚質': 'directions_run', '戦略': 'psychology', 'レース': 'flag', '育成': 'auto_awesome' };
-        area.innerHTML = wisdom.slice(-12).reverse().map(w => `
-            <div class="wisdom-tip" style="display:flex; gap:10px; border-bottom:1px solid rgba(0,0,0,0.03); padding-bottom:10px;">
+        let wisdomListHtml = wisdom.slice(-12).reverse().map(w => `
+            <div class="wisdom-tip" style="display:flex; gap:10px; border-bottom:1px solid rgba(0,0,0,0.03); padding-bottom:10px; margin-bottom:10px;">
                 <span class="material-icons-outlined" style="font-size:16px; color:var(--secondary);">${cats[w.category] || 'shutter_speed'}</span>
                 <div><span class="wisdom-tag">${w.category}</span><span style="font-weight:600; font-size:13px;">${w.text}</span></div>
             </div>
         `).join('');
+
+        area.innerHTML = tagsHtml + wisdomListHtml;
+
+        // Add click events to trend hashtags
+        area.querySelectorAll('.hashtag').forEach(tagEl => {
+            tagEl.onclick = () => {
+                currentTagFilter = tagEl.textContent;
+                renderTimeline();
+                showToast(`「${currentTagFilter}」で絞り込みました`);
+            };
+        });
     }
 
     async function showMemberDetails(uid) {
@@ -189,13 +221,47 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     document.getElementById('postTimelineBtn').onclick = async () => {
         const input = document.getElementById('timelineInput');
+        const btn = document.getElementById('postTimelineBtn');
+        
         if(!input.value && !currentBase64) return;
-        const db = await callBackend({ action: 'getAllCircles' });
-        const aiKey = db.masterConfig?.aiKey;
-        let aiComment = (aiKey && currentBase64) ? await callGemini(aiKey, "このウマ娘の育成画面を分析して、サークルメンバーに役立つアドバイスを100文字以内でして。", currentBase64) : null;
+        
+        try {
+            btn.style.opacity = '0.5';
+            btn.disabled = true;
 
-        await callBackend({ action: 'postTimeline', circleId: currentCircle.id, userName: currentUser.name, text: input.value || "画像をアップロード", image: currentBase64, aiComment });
-        input.value = ''; currentBase64 = null; previewArea.style.display = 'none'; updateDataAndUI();
+            const db = await callBackend({ action: 'getAllCircles' });
+            const aiKey = db.masterConfig?.aiKey;
+            
+            let aiComment = null;
+            if (aiKey && currentBase64) {
+                showToast("AIが画像から攻略ヒントを抽出中...");
+                aiComment = await callGemini(aiKey, "このウマ娘の画像を分析して、サークルメンバーに役立つアドバイスを100文字以内でして。", currentBase64);
+            }
+
+            const payload = { 
+                action: 'postTimeline', 
+                circleId: currentCircle.id, 
+                userName: currentUser.name, 
+                text: input.value || (currentBase64 ? "#スクショ投稿" : ""), 
+                image: currentBase64, 
+                aiComment: aiComment 
+            };
+
+            await callBackend(payload);
+            
+            input.value = '';
+            currentBase64 = null;
+            previewArea.style.display = 'none';
+            showToast("パドックに投稿しました！");
+            
+            updateDataAndUI();
+        } catch (e) {
+            console.error(e);
+            showToast("送信に失敗しました。再試行してください。", "error");
+        } finally {
+            btn.style.opacity = '1';
+            btn.disabled = false;
+        }
     };
 
     document.getElementById('discordLoginBtn').onclick = () => {
@@ -233,15 +299,35 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     window.addEventListener('paste', async (e) => {
         const items = e.clipboardData.items;
+        const activeEl = document.activeElement;
+        const isTimelineFocus = (activeEl.id === 'timelineInput');
+
         for (let item of items) {
             if (item.type.indexOf('image') !== -1) {
-                const inc = Math.floor(Math.random() * 500000) + 100000;
-                const oldM = currentCircle.members[currentUser.id] || { totalFans: 0, targetFans: 3000000 };
-                const newFans = oldM.totalFans + inc;
-                await callBackend({ action: 'updateFans', circleId: currentCircle.id, fans: newFans });
-                if (oldM.totalFans < oldM.targetFans && newFans >= oldM.targetFans) { launchConfetti(); showToast("🎉 目標達成！！", "success"); }
-                else { showToast(`+${(inc/10000).toFixed(1)}万ファン！`); }
-                updateDataAndUI();
+                const blob = item.getAsFile();
+                const reader = new FileReader();
+                reader.onload = async (re) => {
+                    const base64 = re.target.result;
+                    if (isTimelineFocus) {
+                        currentBase64 = base64;
+                        document.getElementById('previewImg').src = base64;
+                        previewArea.style.display = 'block';
+                        showToast("画像をパドックに添付しました");
+                    } else {
+                        const inc = Math.floor(Math.random() * 500000) + 100000;
+                        const oldM = currentCircle.members[currentUser.id] || { totalFans: 0, targetFans: 3000000 };
+                        const newFans = oldM.totalFans + inc;
+                        await callBackend({ action: 'updateFans', circleId: currentCircle.id, fans: newFans });
+                        if (oldM.totalFans < oldM.targetFans && newFans >= oldM.targetFans) {
+                            launchConfetti();
+                            showToast("🎉 目標達成！！素晴らしいです！！", "success");
+                        } else {
+                            showToast(`+${(inc/10000).toFixed(1)}万ファン獲得！`);
+                        }
+                        updateDataAndUI();
+                    }
+                };
+                reader.readAsDataURL(blob);
             }
         }
     });

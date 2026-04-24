@@ -172,3 +172,17 @@ body {
     0% { transform: translateY(0) rotate(0deg); opacity: 1; }
     100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
 }
+
+/* Hashtag Styles */
+.hashtag {
+    color: #1a73e8;
+    font-weight: 600;
+    cursor: pointer;
+    transition: 0.2s;
+    padding: 0 2px;
+}
+.hashtag:hover {
+    text-decoration: underline;
+    background: rgba(26, 115, 232, 0.1);
+    border-radius: 4px;
+}
