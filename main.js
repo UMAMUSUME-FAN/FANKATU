@@ -397,23 +397,26 @@ async function callBackend(p) {
     if (!db.circles[cid]) cid = 'circle-1';
     let targetCircle = db.circles[cid];
 
-    // 箱がなければその場で作る（エラー防止）
-    if(!targetCircle.members) targetCircle.members = {};
-    if(!targetCircle.timeline) targetCircle.timeline = [];
+    // --- 鉄壁の初期化ガード (属性の存在を100%保証) ---
+    if (!targetCircle) {
+        targetCircle = db.circles[cid] = { id: cid, name: '新規サークル', members: {}, timeline: [] };
+    }
+    if (!targetCircle.members) targetCircle.members = {};
+    if (!targetCircle.timeline) targetCircle.timeline = [];
 
     if (p.action === 'getCircleData') return { success: true, circle: targetCircle };
     if (p.action === 'updateConfig') { targetCircle.name = p.name; localStorage.setItem(DB_KEY, JSON.stringify(db)); return { success: true }; }
     if (p.action === 'updateMasterConfig') { if(!db.masterConfig) db.masterConfig = { aiKey: '' }; db.masterConfig.aiKey = p.aiKey; localStorage.setItem(DB_KEY, JSON.stringify(db)); return { success: true }; }
     
     if (p.action === 'postTimeline') {
-        targetCircle.timeline.push({ userName: p.userName, text: p.text, time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}), images: p.images, aiComment: p.aiComment });
+        targetCircle.timeline.push({ userName: p.userName || 'Unknown', text: p.text || '', time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}), images: p.images || [], aiComment: p.aiComment });
         try {
             localStorage.setItem(DB_KEY, JSON.stringify(db));
             return { success: true };
         } catch(e) {
             for (let circ of Object.values(db.circles)) {
-                if (circ.timeline && circ.timeline.length > 5) {
-                    for (let i = 0; i < Math.min(10, circ.timeline.length - 1); i++) { circ.timeline[i].images = []; }
+                if (circ.timeline && circ.timeline.length > 3) {
+                    for (let i = 0; i < circ.timeline.length - 2; i++) { circ.timeline[i].images = []; }
                 }
             }
             localStorage.setItem(DB_KEY, JSON.stringify(db));
@@ -422,10 +425,13 @@ async function callBackend(p) {
     }
     
     if (p.action === 'updateFans') {
-        let m = targetCircle.members[currentUser.id]; 
-        if(!m) m = targetCircle.members[currentUser.id] = { name: currentUser.name, totalFans: 0, targetFans: 3000000, history: [], icon: currentUser.avatar };
-        m.totalFans = p.fans; m.history.push(p.fans);
-        targetCircle.totalFans = Object.values(targetCircle.members).reduce((s,x)=>s+(x.totalFans||0), 0); 
+        const uid = currentUser?.id || 'guest';
+        let m = targetCircle.members[uid]; 
+        if(!m) m = targetCircle.members[uid] = { name: (currentUser?.name || 'Guest'), totalFans: 0, targetFans: 3000000, history: [], icon: (currentUser?.avatar || '') };
+        m.totalFans = parseInt(p.fans) || 0; 
+        if(!m.history) m.history = [];
+        m.history.push(m.totalFans);
+        targetCircle.totalFans = Object.values(targetCircle.members).reduce((s,x)=>s+(parseInt(x.totalFans)||0), 0); 
         localStorage.setItem(DB_KEY, JSON.stringify(db)); 
         return { success: true };
     }
