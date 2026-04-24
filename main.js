@@ -84,6 +84,34 @@ document.addEventListener('DOMContentLoaded', async () => {
             const pName = document.getElementById('portalUserName'); if(pName) pName.textContent = currentUser.name;
             const ava = document.getElementById('portalUserAvatar'); if(currentUser.avatar && ava) ava.style.backgroundImage = `url('${currentUser.avatar}')`;
         }
+        
+        // ログアウト機能の復活
+        const logoutBtn = document.getElementById('logoutBtn');
+        if(logoutBtn) logoutBtn.onclick = () => {
+            currentUser = null;
+            authOverlay.classList.remove('hidden');
+            portalOverlay.classList.add('hidden');
+            window.location.hash = '';
+            showToast("ログアウトしました");
+        };
+
+        const createBtn = document.getElementById('createNewCircleBtn');
+        if(createBtn) createBtn.onclick = async () => {
+            const name = prompt("サークル名を入力:");
+            if (name) {
+                showToast("サークルを作成中...");
+                const db = await callBackend({ action: 'createCircle', name: name });
+                if(db && db.lastCreatedId) {
+                    showToast(`サークル『${name}』を設立！`);
+                    renderPortalCircles();
+                    loginToCircle(db.lastCreatedId);
+                } else if(db) {
+                    // フォールバック
+                    const newCid = Object.keys(db.circles).sort().pop();
+                    loginToCircle(newCid);
+                }
+            }
+        };
         renderPortalCircles();
     }
 
