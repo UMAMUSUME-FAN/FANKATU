@@ -447,7 +447,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     setupDropZone(document.getElementById('heroCard'), false);
     setupDropZone(document.getElementById('timelineCard'), true);
 
-});
+
+
 
     const attachBtn = document.getElementById('attachImgBtn'); if(attachBtn) attachBtn.onclick = () => { const i = document.getElementById('timelineImageInput'); if(i) i.click(); };
     const tInput = document.getElementById('timelineImageInput'); if(tInput) tInput.onchange = (e) => {
