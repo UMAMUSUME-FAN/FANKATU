@@ -25,17 +25,33 @@ document.addEventListener('DOMContentLoaded', async () => {
     
     // 起動時に招待パラメータをチェック
     const urlParams = new URLSearchParams(window.location.search);
-    const joinCid = urlParams.get('join');
+    let joinCid = urlParams.get('join');
+    // メモがあれば復元、なければ保存
+    if (joinCid) {
+        sessionStorage.setItem('pendingJoin', joinCid);
+    } else {
+        joinCid = sessionStorage.getItem('pendingJoin');
+    }
 
     async function handleAutoJoin() {
         if (joinCid && currentUser) {
-            showToast("招待URLからサークルに参加中...");
+            // メモをクリア
+            sessionStorage.removeItem('pendingJoin');
             // URLからパラメータを消す
             window.history.replaceState({}, document.title, window.location.pathname);
             
+            // まずコードとして検索
+            let targetId = joinCid;
+            const findRes = await callBackend({ action: 'findCircleByCode', code: joinCid });
+            if (findRes.success) {
+                targetId = findRes.circleId;
+            }
+
+            showToast("招待URLからサークルに参加中...");
+            
             // 参加処理
-            await callBackend({ action: 'joinCircle', circleId: joinCid });
-            loginToCircle(joinCid);
+            await callBackend({ action: 'joinCircle', circleId: targetId });
+            loginToCircle(targetId);
         }
     }
     
@@ -165,6 +181,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         const tp = document.getElementById('totalFanProgress'); if(tp) tp.style.width = Math.min(100, ((my.totalFans || 0) / (my.targetFans || def)) * 100) + '%';
         const tpt = document.getElementById('totalFanPercentText'); if(tpt) tpt.textContent = Math.floor(((my.totalFans || 0) / (my.targetFans || def)) * 100) + '%';
         
+        // --- サークル全体の合計進捗 ---
+        const totalGot = Object.values(c.members).reduce((s, m) => s + (m.totalFans || 0), 0);
+        const totalGoal = c.circleTotalTarget || (def * Object.keys(c.members).length);
+        const mTitle = document.getElementById('masterTotalTitle'); if(mTitle) mTitle.textContent = `${c.name}全体の進捗`;
+        const mDisp = document.getElementById('masterTotalFanDisplay'); if(mDisp) mDisp.textContent = `${totalGot.toLocaleString()} / ${totalGoal.toLocaleString()}`;
+        const mBar = document.getElementById('masterTotalBar'); if(mBar) mBar.style.width = Math.min(100, (totalGot / totalGoal) * 100) + '%';
+
         renderGrowthChart(); renderMembers(); renderTimeline(); renderAIWisdom();
     }
 
@@ -489,18 +512,33 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
 
             div.innerHTML = `
-                <div style="display:flex; align-items:center; gap:10px;">
+                <div style="display:flex; align-items:center; gap:10px; flex:1;">
                     <div class="member-avatar-mini" style="background-image:url('${m.icon || ''}'); background-size:cover; width:30px; height:30px;">${m.icon ? '' : m.name.substring(0,1)}</div>
-                    <div>
-                        <div style="font-weight:bold; font-size:12px;">${m.name}</div>
-                        <div style="font-size:10px; color:var(--text-muted);">${(m.totalFans || 0).toLocaleString()} ファン</div>
+                    <div style="flex:1;">
+                        <div style="font-weight:bold; font-size:11px;">${m.name}</div>
+                        <div style="display:flex; align-items:center; gap:5px; margin-top:4px;">
+                            <input type="number" value="${m.targetFans || 3000000}" id="targetInput-${mid}" class="glass-input" style="font-size:10px; padding:2px 5px; height:24px; width:100px;">
+                            <button class="glass-btn primary" style="font-size:10px; padding:2px 8px; height:24px;" onclick="updateIndividualTarget('${mid}', '${m.name}')">🎯</button>
+                        </div>
                     </div>
                 </div>
-                ${actionBtn}
+                <div style="display:flex; flex-direction:column; align-items:flex-end; gap:5px;">
+                    <div style="font-size:10px; color:var(--text-muted);">${(m.totalFans || 0).toLocaleString()} ファン</div>
+                    ${actionBtn}
+                </div>
             `;
             list.appendChild(div);
         });
     }
+
+    window.updateIndividualTarget = async (uid, name) => {
+        const input = document.getElementById(`targetInput-${uid}`);
+        if (!input) return;
+        const val = parseInt(input.value) || 3000000;
+        await callBackend({ action: 'updateSingleMemberTarget', memberId: uid, target: val });
+        showToast(`${name} さんの目標を ${val.toLocaleString()} 人に変更しました！🎯`);
+        updateDataAndUI();
+    };
 
     window.transferLeader = async (targetId, targetName) => {
         if (confirm(`リーダー権限を ${targetName} さんへ譲渡します。よろしいですか？\n※譲渡するとあなたはこの管理画面を操作できなくなります。`)) {
@@ -535,15 +573,22 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // --- Invite URL Logic (一気に加入させる魔法) ---
     const copyInviteBtn = document.getElementById('copyInviteUrlBtn');
-    if(copyInviteBtn) copyInviteBtn.onclick = () => {
+    if(copyInviteBtn) copyInviteBtn.onclick = async () => {
         if(!currentCircle) return;
+        
+        // 招待コード（ランダム英数字）を生成・確保
+        if (!currentCircle.inviteCode) {
+            currentCircle.inviteCode = Math.random().toString(36).substring(2, 10).toUpperCase();
+            await callBackend({ action: 'updateConfig', inviteCode: currentCircle.inviteCode });
+        }
+        
         const base = window.location.origin + window.location.pathname;
-        const inviteUrl = `${base}?join=${currentCircle.id}`;
+        const inviteUrl = `${base}?join=${currentCircle.inviteCode}`;
         const display = document.getElementById('inviteUrlDisplay');
         if(display) display.value = inviteUrl;
         
         navigator.clipboard.writeText(inviteUrl).then(() => {
-            showToast("招待URLをコピーしました！");
+            showToast("ランダム招待URLをコピーしました！");
         });
     };
 
@@ -555,14 +600,36 @@ document.addEventListener('DOMContentLoaded', async () => {
     const saveAdminBtn = document.getElementById('saveAdminBtn');
     if(saveAdminBtn) saveAdminBtn.onclick = async () => {
         const newName = document.getElementById('adminCircleNameInput').value;
-        await callBackend({ action: 'updateConfig', name: newName });
+        const totalTarget = parseInt(document.getElementById('adminTotalTargetInput').value) || 0;
+        await callBackend({ action: 'updateConfig', name: newName, circleTotalTarget: totalTarget });
         
-        // 保存したら閉じる
         const am = document.getElementById('admin-modal');
         if(am) am.classList.add('hidden');
-        
         showToast('設定を保存しました');
         updateDataAndUI();
+    };
+
+    const autoTotalBtn = document.getElementById('setTotalTargetAutoBtn');
+    if(autoTotalBtn) autoTotalBtn.onclick = () => {
+        if(!currentCircle) return;
+        const norm = parseInt(document.getElementById('adminIndividualTarget').value) || 3000000;
+        const count = Object.keys(currentCircle.members || {}).length;
+        const total = norm * count;
+        const input = document.getElementById('adminTotalTargetInput');
+        if(input) input.value = total;
+        showToast(`合計目標を ${total.toLocaleString()} に計算しました！`);
+    };
+
+    const calcQuotaBtn = document.getElementById('calcQuotaFromTotalBtn');
+    if(calcQuotaBtn) calcQuotaBtn.onclick = () => {
+        if(!currentCircle) return;
+        const total = parseInt(document.getElementById('adminTotalTargetInput').value) || 0;
+        const count = Object.keys(currentCircle.members || {}).length;
+        if(count === 0) return;
+        const quota = Math.floor(total / count);
+        const input = document.getElementById('adminIndividualTarget');
+        if(input) input.value = quota;
+        showToast(`一人あたりのノルマを ${quota.toLocaleString()} に計算しました！`);
     };
 
     const applyTargetBtn = document.getElementById('applyIndividualTargetBtn');
@@ -625,7 +692,18 @@ async function callBackend(p) {
     if (!targetCircle.timeline) targetCircle.timeline = [];
 
     if (p.action === 'getCircleData') return { success: true, circle: targetCircle };
-    if (p.action === 'updateConfig') { targetCircle.name = p.name; localStorage.setItem(DB_KEY, JSON.stringify(db)); return { success: true }; }
+    if (p.action === 'updateConfig') { 
+        if(p.name) targetCircle.name = p.name; 
+        if(p.inviteCode) targetCircle.inviteCode = p.inviteCode;
+        if(p.circleTotalTarget !== undefined) targetCircle.circleTotalTarget = p.circleTotalTarget;
+        localStorage.setItem(DB_KEY, JSON.stringify(db)); 
+        return { success: true }; 
+    }
+    
+    if (p.action === 'findCircleByCode') {
+        const found = Object.values(db.circles).find(c => c.inviteCode === p.code);
+        return { success: !!found, circleId: found ? found.id : null };
+    }
     if (p.action === 'updateMasterConfig') { if(!db.masterConfig) db.masterConfig = { aiKey: '' }; db.masterConfig.aiKey = p.aiKey; localStorage.setItem(DB_KEY, JSON.stringify(db)); return { success: true }; }
     
     if (p.action === 'postTimeline') {
@@ -660,6 +738,15 @@ async function callBackend(p) {
         targetCircle.defaultTarget = p.target; // サークル全体の標準目標を更新
         Object.values(targetCircle.members).forEach(m => { m.targetFans = p.target; });
         localStorage.setItem(DB_KEY, JSON.stringify(db));
+        return { success: true };
+    }
+
+    if (p.action === 'updateSingleMemberTarget') {
+        const m = targetCircle.members[p.memberId];
+        if (m) {
+            m.targetFans = p.target;
+            localStorage.setItem(DB_KEY, JSON.stringify(db));
+        }
         return { success: true };
     }
 
