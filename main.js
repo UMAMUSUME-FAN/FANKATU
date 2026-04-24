@@ -5,19 +5,26 @@ let DISCORD_CLIENT_ID = '1497168159210340484';
 let currentUser = null;
 let currentCircle = null;
 
+// --- Helper Functions ---
+function showToast(m, t='success'){ const s=document.getElementById('toast'); if(!s) return; s.textContent=m; s.className=`toast show ${t}`; setTimeout(()=>s.classList.remove('show'),3000); }
+async function updateDataAndUI(){ if(!currentCircle) return; const res=await callBackend({action:'getCircleData', circleId:currentCircle.id}); currentCircle=res.circle; updateDashboard(); }
+
 // --- DOM References ---
 document.addEventListener('DOMContentLoaded', async () => {
+    const loginBtn = document.getElementById('discordLoginBtn');
+    if (loginBtn) {
+        loginBtn.onclick = () => {
+            const r = window.location.origin + window.location.pathname;
+            window.location.href = `https://discord.com/api/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&redirect_uri=${encodeURIComponent(r)}&response_type=token&scope=identify`;
+        };
+    }
+
     const authOverlay = document.getElementById('authOverlay');
     const portalOverlay = document.getElementById('circleSelectionOverlay');
     const appWrapper = document.getElementById('appWrapper');
-    const masterStatsOverlay = document.getElementById('masterStatsOverlay');
-    const postModal = document.getElementById('post-modal');
-    const timelineInput = document.getElementById('timelineInput');
-    const previewArea = document.getElementById('timelineImagePreview');
-
+    
     await callBackend({ action: 'init' });
     
-    // Auth Check
     const params = new URLSearchParams(window.location.hash.substring(1));
     const token = params.get('access_token');
     if (token) {
@@ -25,23 +32,25 @@ document.addEventListener('DOMContentLoaded', async () => {
         try {
             const userRes = await fetch('https://discord.com/api/users/@me', { headers: { Authorization: `Bearer ${token}` } });
             const du = await userRes.json();
-            currentUser = { id: du.id, name: du.username, avatar: `https://cdn.discordapp.com/avatars/${du.id}/${du.avatar}.png` };
-            authOverlay.classList.add('hidden');
+            currentUser = { id: du.id, name: du.username, avatar: `https://cdn.discordart.com/avatars/${du.id}/${du.avatar}.png` };
+            if(authOverlay) authOverlay.classList.add('hidden');
             showPortal();
         } catch(e) { console.error("Auth Fail", e); }
     }
 
     async function showPortal() {
+        if(!portalOverlay) return;
         portalOverlay.classList.remove('hidden');
-        document.getElementById('portalUserName').textContent = currentUser.name;
-        const ava = document.getElementById('portalUserAvatar'); if(currentUser.avatar) ava.style.backgroundImage = `url('${currentUser.avatar}')`;
+        const pName = document.getElementById('portalUserName'); if(pName) pName.textContent = currentUser.name;
+        const ava = document.getElementById('portalUserAvatar'); if(currentUser.avatar && ava) ava.style.backgroundImage = `url('${currentUser.avatar}')`;
         renderPortalCircles();
     }
 
     async function renderPortalCircles() {
         const db = await callBackend({ action: 'getAllCircles' });
-        const myList = document.getElementById('myCirclesList'); myList.innerHTML = '';
-        const resultsList = document.getElementById('searchResultsList'); resultsList.innerHTML = '';
+        const myList = document.getElementById('myCirclesList'); if(!myList) return;
+        const resultsList = document.getElementById('searchResultsList'); if(!resultsList) return;
+        myList.innerHTML = ''; resultsList.innerHTML = '';
         const userToCircles = db.userToCircles[currentUser.id] || [];
         userToCircles.forEach(cid => {
             const c = db.circles[cid]; if(!c) return;
@@ -53,9 +62,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             if (userToCircles.includes(cid)) return;
             const c = db.circles[cid];
             const div = document.createElement('div'); div.className = 'glass-btn'; div.style.marginBottom = '10px';
-            const isPending = c.joinRequests && c.joinRequests.includes(currentUser.id);
-            div.innerHTML = `<span>${c.name}</span> <span class="tag" style="float:right; background:${isPending?'#ccc':''}">${isPending?'Pending':'Join'}</span>`;
-            if(!isPending) div.onclick = () => requestJoinCircle(cid); resultsList.appendChild(div);
+            div.innerHTML = `<span>${c.name}</span> <span class="tag" style="float:right;">Join</span>`;
+            div.onclick = () => showToast("現在、参加申請は受け付けていません"); resultsList.appendChild(div);
         });
     }
 
@@ -63,114 +71,89 @@ document.addEventListener('DOMContentLoaded', async () => {
         const res = await callBackend({ action: 'getCircleData', circleId: cid });
         if (res.success) {
             currentCircle = res.circle;
-            portalOverlay.classList.add('hidden');
-            appWrapper.style.display = 'flex';
-            document.getElementById('userNameDisplay').textContent = currentUser.name;
-            const ua = document.getElementById('userAvatar'); if(currentUser.avatar) ua.style.backgroundImage = `url('${currentUser.avatar}')`;
+            if(portalOverlay) portalOverlay.classList.add('hidden');
+            if(appWrapper) appWrapper.style.display = 'flex';
+            const nameDisp = document.getElementById('userNameDisplay'); if(nameDisp) nameDisp.textContent = currentUser.name;
+            const ua = document.getElementById('userAvatar'); if(currentUser.avatar && ua) ua.style.backgroundImage = `url('${currentUser.avatar}')`;
             updateDashboard();
         }
     }
 
-    async function requestJoinCircle(cid) {
-        await callBackend({ action: 'requestJoin', circleId: cid, userId: currentUser.id });
-        showToast('参加申請を送りました！'); renderPortalCircles();
-    }
-
     function updateDashboard() {
-        document.getElementById('circleNameDisplay').textContent = currentCircle.name;
+        if(!currentCircle) return;
+        const cName = document.getElementById('circleNameDisplay'); if(cName) cName.textContent = currentCircle.name;
         const my = currentCircle.members[currentUser.id] || { totalFans: 0, targetFans: 3000000, history: [] };
-        document.getElementById('displayTotalTarget').textContent = my.targetFans.toLocaleString();
-        document.getElementById('displayRemaining').textContent = Math.max(0, my.targetFans - my.totalFans).toLocaleString();
-        document.getElementById('totalFanProgress').style.width = Math.min(100, (my.totalFans / my.targetFans) * 100) + '%';
-        document.getElementById('totalFanPercentText').textContent = Math.floor((my.totalFans / my.targetFans) * 100) + '%';
-        renderGrowthChart();
-        renderMembers();
-        renderTimeline();
-        renderAIWisdom();
+        const dt = document.getElementById('displayTotalTarget'); if(dt) dt.textContent = my.targetFans.toLocaleString();
+        const dr = document.getElementById('displayRemaining'); if(dr) dr.textContent = Math.max(0, my.targetFans - my.totalFans).toLocaleString();
+        const tp = document.getElementById('totalFanProgress'); if(tp) tp.style.width = Math.min(100, (my.totalFans / my.targetFans) * 100) + '%';
+        const tpt = document.getElementById('totalFanPercentText'); if(tpt) tpt.textContent = Math.floor((my.totalFans / my.targetFans) * 100) + '%';
+        renderGrowthChart(); renderMembers(); renderTimeline(); renderAIWisdom();
     }
 
     function renderMembers() {
-        const g = document.getElementById('membersGrid'); g.innerHTML = '';
+        const g = document.getElementById('membersGrid'); if(!g) return;
+        g.innerHTML = '';
         Object.keys(currentCircle.members).forEach(uid => {
             const m = currentCircle.members[uid];
             const d = document.createElement('div'); d.className = 'member-avatar-mini';
             if(m.icon) d.style.backgroundImage = `url('${m.icon}')`; else d.textContent = m.name.substring(0,1);
-            d.onclick = () => showMemberDetails(uid); g.appendChild(d);
+            g.appendChild(d);
         });
     }
 
     let currentTagFilter = null;
-
     function renderTimeline() {
-        const list = document.getElementById('timelineList'); list.innerHTML = '';
+        const list = document.getElementById('timelineList'); if(!list) return;
+        list.innerHTML = '';
         let posts = currentCircle.timeline || [];
         if (currentTagFilter) {
             posts = posts.filter(p => p.text.includes(currentTagFilter));
             const clearBtn = document.createElement('div');
-            clearBtn.innerHTML = `<button class="glass-btn" style="width:100%; font-size:12px; margin-bottom:10px; background:rgba(0,0,0,0.05);">絞り込み中: ${currentTagFilter} (解除)</button>`;
+            clearBtn.innerHTML = `<button class="glass-btn" style="width:100%; font-size:12px; margin-bottom:10px;">絞り込み中: ${currentTagFilter} (解除)</button>`;
             clearBtn.onclick = () => { currentTagFilter = null; renderTimeline(); };
             list.appendChild(clearBtn);
         }
-
         posts.slice().reverse().forEach(p => {
             const div = document.createElement('div'); div.className = 'timeline-item';
             const linkedText = p.text.replace(/#(\S+)/g, '<span class="hashtag">#$1</span>');
-            
-            let imagesHtml = (p.images || []).map(img => `<img src="${img}" style="width:calc(50% - 5px); border-radius:10px; border:1px solid #eee; aspect-ratio:16/9; object-fit:cover;">`).join('');
+            let imagesHtml = (p.images || []).map(img => `<img src="${img}" style="width:calc(50% - 5px); border-radius:10px; border:1px solid #eee; object-fit:cover; aspect-ratio:16/9;">`).join('');
             let imageGrid = imagesHtml ? `<div style="display:flex; flex-wrap:wrap; gap:10px; margin-top:10px;">${imagesHtml}</div>` : '';
-            if(p.images && p.images.length === 1) imageGrid = `<img src="${p.images[0]}" style="width:100%; border-radius:10px; margin-top:10px; border:1px solid #eee;">`;
-            
-            let aiHtml = p.aiComment ? `<div style="margin-top:10px; padding:10px; background:#f0f7ff; border-radius:10px; font-size:12px; border-left:3px solid #5865F2;"><b>✨ AI分析:</b> ${p.aiComment}</div>` : '';
-            div.innerHTML = `<div class="timeline-header"><span class="timeline-user">${p.userName}</span><span class="timeline-time">${p.time}</span></div><div class="timeline-content">${linkedText}</div>${imageGrid}${aiHtml}`;
+            div.innerHTML = `<div class="timeline-header"><span class="timeline-user">${p.userName}</span><span class="timeline-time">${p.time}</span></div><div class="timeline-content">${linkedText}</div>${imageGrid}`;
+            if(p.aiComment) div.innerHTML += `<div style="margin-top:10px; padding:10px; background:rgba(251,161,186,0.05); border-radius:10px; font-size:12px; border-left:3px solid var(--primary);"><b>✨ AI Secretary:</b> ${p.aiComment}</div>`;
             div.querySelectorAll('.hashtag').forEach(tagEl => { tagEl.onclick = (e) => { e.stopPropagation(); currentTagFilter = tagEl.textContent; renderTimeline(); }; });
             list.appendChild(div);
         });
     }
 
     async function renderAIWisdom() {
-        const area = document.getElementById('aiWisdomContent');
+        const area = document.getElementById('aiWisdomContent'); if(!area) return;
         const db = await callBackend({ action: 'getAllCircles' });
         const wisdom = db.globalWisdom || [];
         let allTags = [];
         Object.values(db.circles).forEach(c => { (c.timeline || []).forEach(p => { const tags = p.text.match(/#(\S+)/g); if(tags) allTags.push(...tags); }); });
         const tagCounts = allTags.reduce((acc, t) => (acc[t] = (acc[t] || 0) + 1, acc), {});
-        const sortedTags = Object.entries(tagCounts).sort((a,b) => b[1] - a[1]).slice(0, 8);
+        const sortedTags = Object.entries(tagCounts).sort((a,b) => b[1] - a[1]).slice(0, 10);
         let tagsHtml = `<div style="margin-bottom:20px; display:flex; flex-wrap:wrap; gap:8px;">`;
-        sortedTags.forEach(([tag]) => { tagsHtml += `<span class="hashtag" style="font-size:11px; background:rgba(26, 115, 232, 0.08); padding:4px 10px; border-radius:12px; border:1px solid rgba(26, 115, 232, 0.2);">${tag}</span>`; });
-        tagsHtml += `</div><div style="height:1px; background:rgba(0,0,0,0.05); margin-bottom:15px;"></div>`;
-
-        if (wisdom.length === 0) { area.innerHTML = tagsHtml + "全国から攻略情報を『継承』し、自動でWiki化中..."; return; }
-        const cats = { 'ステータス': 'trending_up', '脚質': 'directions_run', '戦略': 'psychology', 'レース': 'flag', '育成': 'auto_awesome' };
-        let wisdomListHtml = wisdom.slice(-12).reverse().map(w => `<div class="wisdom-tip" style="display:flex; gap:10px; border-bottom:1px solid rgba(0,0,0,0.03); padding-bottom:10px; margin-bottom:10px;"><span class="material-icons-outlined" style="font-size:16px; color:var(--secondary);">${cats[w.category] || 'shutter_speed'}</span><div><span class="wisdom-tag">${w.category}</span><span style="font-weight:600; font-size:13px;">${w.text}</span></div></div>`).join('');
-        area.innerHTML = tagsHtml + wisdomListHtml;
-        area.querySelectorAll('.hashtag').forEach(tagEl => { tagEl.onclick = () => { currentTagFilter = tagEl.textContent; renderTimeline(); showToast(`「${currentTagFilter}」で絞り込みました`); }; });
+        sortedTags.forEach(([tag]) => { tagsHtml += `<span class="hashtag" style="font-size:11px; background:rgba(26,115,232,0.08); padding:4px 10px; border-radius:12px; cursor:pointer;">${tag}</span>`; });
+        tagsHtml += `</div>`;
+        area.innerHTML = tagsHtml + (wisdom.length === 0 ? "攻略情報を待機中..." : wisdom.slice(-8).reverse().map(w => `<div class="wisdom-tip"><span class="wisdom-tag">${w.category}</span>${w.text}</div>`).join(''));
+        area.querySelectorAll('.hashtag').forEach(t => t.onclick = () => { currentTagFilter = t.textContent; renderTimeline(); });
     }
 
-    async function showMemberDetails(uid) {
-        const m = currentCircle.members[uid]; if (!m) return;
-        alert(`${m.name} さんの状況:\n目標達成率: ${(m.totalFans / m.targetFans * 100).toFixed(1)}%`);
-    }
-
-    async function generateAIAnalysis() {
-        const area = document.getElementById('aiMessageArea'); area.innerHTML = "分析中...";
-        const db = await callBackend({ action: 'getAllCircles' });
-        const aiKey = db.masterConfig?.aiKey;
-        
-        let headerHtml = (aiKey) ? `<div>AIが状況を分析しました。「順調なペースです！」</div>` : `<div style="padding:15px; background:rgba(0,0,0,0.03); border-radius:15px; border:1px dashed #ccc;"><p style="font-weight:bold;">AI Secretary は準備中</p></div>`;
-        area.innerHTML = `
-            ${headerHtml}
-            <button id="copyReceiptBtn" class="glass-btn primary" style="margin-top:20px; width:100%; font-size:12px; height:45px; display:flex; align-items:center; justify-content:center; gap:8px;">
-                <span class="material-icons-outlined" style="font-size:18px;">content_copy</span> 進捗レシートをコピー (共有用)
-            </button>
-        `;
-        document.getElementById('copyReceiptBtn').onclick = () => copyCircleReceipt();
-    }
-
-    function copyCircleReceipt() {
-        const members = Object.values(currentCircle.members);
-        const done = members.filter(m => m.totalFans >= m.targetFans).length;
-        const text = `--- 🧧 Uma Tracker Report ---\nCircle: ${currentCircle.name}\nTotal Fans: ${(currentCircle.totalFans/1000000).toFixed(2)}M\nGoal: ${done} members reached\n---------------------------`;
-        navigator.clipboard.writeText(text); showToast("✅ コピーしました！");
+    // --- Image Processing ---
+    async function compressImage(base64, maxWidth = 1000) {
+        return new Promise((resolve) => {
+            const img = new Image();
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                let width = img.width; let height = img.height;
+                if (width > maxWidth) { height = (maxWidth / width) * height; width = maxWidth; }
+                canvas.width = width; canvas.height = height;
+                const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0, width, height);
+                resolve(canvas.toDataURL('image/jpeg', 0.6)); // 60% quality
+            };
+            img.src = base64;
+        });
     }
 
     async function callGemini(key, prompt, imageBase64s = []) {
@@ -180,92 +163,99 @@ document.addEventListener('DOMContentLoaded', async () => {
             imageBase64s.forEach(img => parts.push({ inline_data: { mime_type: "image/jpeg", data: img.split(',')[1] } }));
             const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts }] }) });
             const data = await res.json(); return data.candidates[0].content.parts[0].text;
-        } catch (e) { return "AI分析に失敗しました。"; }
+        } catch (e) { return null; }
     }
 
-    // --- Timeline Image Handling ---
+    // --- Post Logic ---
     let currentImages = [];
+    const postModal = document.getElementById('post-modal');
+    const timelineInput = document.getElementById('timelineInput');
+    const previewArea = document.getElementById('timelineImagePreview');
+
     const updatePreview = () => {
+        if(!previewArea) return;
         previewArea.innerHTML = '';
         if (currentImages.length === 0) { previewArea.style.display = 'none'; return; }
         previewArea.style.display = 'flex';
         currentImages.forEach((img, idx) => {
-            const div = document.createElement('div'); div.style = "position:relative; width:80px; height:80px; border-radius:10px; overflow:hidden; border:2px solid var(--primary);";
-            div.innerHTML = `<img src="${img}" style="width:100%; height:100%; object-fit:cover;"><span style="position:absolute; top:2px; right:2px; cursor:pointer; background:rgba(0,0,0,0.5); color:white; border-radius:50%; font-size:14px; width:18px; height:18px; display:flex; align-items:center; justify-content:center;" onclick="removeImage(${idx})">×</span>`;
+            const div = document.createElement('div'); div.style = "position:relative; width:80px; height:80px; border-radius:10px; overflow:hidden;";
+            div.innerHTML = `<img src="${img}" style="width:100%; height:100%; object-fit:cover;"><span style="position:absolute; top:0; right:0; cursor:pointer; background:rgba(0,0,0,0.5); color:white; padding:2px;" onclick="removeImage(${idx})">×</span>`;
             previewArea.appendChild(div);
         });
     };
     window.removeImage = (idx) => { currentImages.splice(idx, 1); updatePreview(); };
 
-    // --- Modal Logic ---
-    document.getElementById('openPostModalBtn').onclick = () => { postModal.classList.remove('hidden'); timelineInput.focus(); };
-    document.getElementById('closePostModal').onclick = () => postModal.classList.add('hidden');
+    const openBtn = document.getElementById('openPostModalBtn'); if(openBtn) openBtn.onclick = () => { if(postModal) postModal.classList.remove('hidden'); if(timelineInput) timelineInput.focus(); };
+    const closeBtn = document.getElementById('closePostModal'); if(closeBtn) closeBtn.onclick = () => { if(postModal) postModal.classList.add('hidden'); };
     
-    document.getElementById('postTimelineBtn').onclick = async () => {
+    if(postBtn) postBtn.onclick = async () => {
         if(!timelineInput.value && currentImages.length === 0) return;
-        const btn = document.getElementById('postTimelineBtn');
         try {
-            btn.disabled = true;
+            postBtn.disabled = true; postBtn.innerHTML = "送信中...";
+            
+            // ログイン状態とサークル情報を再チェック
+            if (!currentUser || !currentCircle) {
+                throw new Error("ログイン情報の再確認が必要です。一度リロードしてください。");
+            }
+
             const db = await callBackend({ action: 'getAllCircles' });
             let aiComment = null;
             if (db.masterConfig?.aiKey && currentImages.length > 0) {
-                showToast("AIが画像分析中...");
-                aiComment = await callGemini(db.masterConfig.aiKey, "このウマ娘の画像を分析してヒントを教えて。", currentImages);
+                showToast("AIが画像から戦略を分析中...");
+                aiComment = await callGemini(db.masterConfig.aiKey, "画像を見て、攻略アドバイスを100文字以内でしてください。", currentImages);
             }
-            await callBackend({ action: 'postTimeline', circleId: currentCircle.id, userName: currentUser.name, text: timelineInput.value || "#スクショ投稿", images: currentImages, aiComment });
-            timelineInput.value = ''; currentImages = []; updatePreview(); postModal.classList.add('hidden'); updateDataAndUI();
-        } finally { btn.disabled = false; }
+            
+            const res = await callBackend({ 
+                action: 'postTimeline', 
+                circleId: currentCircle.id, 
+                userName: currentUser.name, 
+                text: timelineInput.value || "#スクショ投稿", 
+                images: currentImages, 
+                aiComment: aiComment 
+            });
+            
+            if(res.success) {
+                timelineInput.value = ''; currentImages = []; updatePreview(); 
+                if(postModal) postModal.classList.add('hidden'); 
+                updateDataAndUI();
+                showToast("パドックに投稿しました！");
+            }
+        } catch(e) {
+            console.error(e);
+            showToast(`送信失敗: ${e.message}`, "error");
+        } finally { postBtn.disabled = false; postBtn.innerHTML = '<span class="material-icons-outlined" style="margin-right:8px;">send</span> 送信'; }
     };
 
-    timelineInput.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); document.getElementById('postTimelineBtn').click(); } };
+    if(timelineInput) timelineInput.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if(postBtn) postBtn.click(); } };
 
-    // --- Drag and Drop / Paste ---
-    const timelineCard = document.getElementById('timelineCard');
-    timelineCard.onclick = () => document.getElementById('openPostModalBtn').click();
-    
     window.addEventListener('paste', async (e) => {
         const items = e.clipboardData.items;
-        const isModalOpen = !postModal.classList.contains('hidden');
+        const isModalOpen = postModal && !postModal.classList.contains('hidden');
         for (let item of items) {
             if (item.type.indexOf('image') !== -1) {
                 const blob = item.getAsFile();
                 const reader = new FileReader();
                 reader.onload = async (re) => {
-                    if (isModalOpen) { if(currentImages.length < 4){ currentImages.push(re.target.result); updatePreview(); } }
-                    else {
-                        // Open modal automatically on paste
-                        postModal.classList.remove('hidden');
-                        currentImages = [re.target.result];
-                        updatePreview();
-                        timelineInput.focus();
-                        showToast("画像を添付して投稿画面を開きました");
-                    }
+                    const compressed = await compressImage(re.target.result);
+                    if (isModalOpen) { if(currentImages.length < 4){ currentImages.push(compressed); updatePreview(); } }
+                    else { if(postModal) postModal.classList.remove('hidden'); currentImages = [compressed]; updatePreview(); if(timelineInput) timelineInput.focus(); }
                 };
                 reader.readAsDataURL(blob);
             }
         }
     });
 
-    document.getElementById('attachImgBtn').onclick = () => document.getElementById('timelineImageInput').click();
-    document.getElementById('timelineImageInput').onchange = (e) => {
-        const file = e.target.files[0];
-        if (file) { const reader = new FileReader(); reader.onload = (re) => { if(currentImages.length < 4){ currentImages.push(re.target.result); updatePreview(); } }; reader.readAsDataURL(file); }
+    const attachBtn = document.getElementById('attachImgBtn'); if(attachBtn) attachBtn.onclick = () => { const i = document.getElementById('timelineImageInput'); if(i) i.click(); };
+    const tInput = document.getElementById('timelineImageInput'); if(tInput) tInput.onchange = (e) => {
+        const f = e.target.files[0];
+        if(f) { const r = new FileReader(); r.onload = async (re) => { const compressed = await compressImage(re.target.result); if(currentImages.length < 4){ currentImages.push(compressed); updatePreview(); } }; r.readAsDataURL(f); }
     };
 
-    // --- Others ---
-    document.getElementById('discordLoginBtn').onclick = () => { const r = window.location.origin + window.location.pathname; window.location.href = `https://discord.com/api/oauth2/authorize?client_id=${DISCORD_CLIENT_ID}&redirect_uri=${encodeURIComponent(r)}&response_type=token&scope=identify`; };
-    document.getElementById('statsBtn').onclick = (e) => { e.preventDefault(); masterStatsOverlay.classList.remove('hidden'); generateAIAnalysis(); };
-    document.getElementById('closeStatsBtn').onclick = () => masterStatsOverlay.classList.add('hidden');
-    document.getElementById('switchCircleBtn').onclick = showPortal;
-    document.getElementById('logoutBtn').onclick = () => window.location.href = window.location.pathname;
-    document.getElementById('adminBtn').onclick = (e) => { e.preventDefault(); const p = prompt('Leader Pass:'); if(p === currentCircle.adminPass) { document.getElementById('admin-modal').classList.remove('hidden'); document.getElementById('adminCircleNameInput').value = currentCircle.name; } };
-    document.getElementById('masterAdminBtn').onclick = async (e) => { e.preventDefault(); if(prompt('Master Pass:')==='master') { const db = await callBackend({ action: 'getAllCircles' }); const nk = prompt('Gemini API Key:', db.masterConfig?.aiKey); if(nk) { await callBackend({ action: 'updateMasterConfig', aiKey: nk }); showToast("✅ 保存"); } } };
-    document.getElementById('saveAdminBtn').onclick = async () => { await callBackend({ action: 'updateConfig', circleId: currentCircle.id, name: document.getElementById('adminCircleNameInput').value }); showToast("✅ 保存"); document.getElementById('admin-modal').classList.add('hidden'); updateDataAndUI(); };
-    function launchConfetti() { for(let i=0;i<60;i++) { const c=document.createElement('div'); c.className='confetti'; c.style.left=Math.random()*100+'vw'; c.style.backgroundColor=['#fba1ba','#e0c384','#fff'][Math.floor(Math.random()*3)]; c.style.animationDelay=Math.random()*2+'s'; document.body.appendChild(c); setTimeout(()=>c.remove(),4000); } }
-    function showToast(m, t='success'){ const s=document.getElementById('toast'); s.textContent=m; s.className=`toast show ${t}`; setTimeout(()=>s.classList.remove('show'),3000); }
-    async function updateDataAndUI(){ const res=await callBackend({action:'getCircleData', circleId:currentCircle.id}); currentCircle=res.circle; updateDashboard(); }
-    let growthChart = null;
-    function renderGrowthChart() { const ctx = document.getElementById('growthChart').getContext('2d'); if(growthChart) growthChart.destroy(); const myData = currentCircle.members[currentUser.id]?.history || [10, 20, 30, 45, 55]; growthChart = new Chart(ctx, { type: 'line', data: { labels: ['1週','2週','3週','4週','今日'], datasets: [{ data: myData, borderColor:'#fba1ba', fill:true, backgroundColor:'rgba(251,161,186,0.1)', tension:0.4 }] }, options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}} } }); }
+    // --- Other Nav ---
+    const statsBtn = document.getElementById('statsBtn'); if(statsBtn) statsBtn.onclick = (e) => { e.preventDefault(); const m = document.getElementById('masterStatsOverlay'); if(m) m.classList.remove('hidden'); generateAIAnalysis(); };
+    const closeStats = document.getElementById('closeStatsBtn'); if(closeStats) closeStats.onclick = () => { const m = document.getElementById('masterStatsOverlay'); if(m) m.classList.add('hidden'); };
+    const switchBtn = document.getElementById('switchCircleBtn'); if(switchBtn) switchBtn.onclick = showPortal;
+    const adminBtn = document.getElementById('adminBtn'); if(adminBtn) adminBtn.onclick = (e) => { e.preventDefault(); const p = prompt('Leader PW:'); if(p === currentCircle.adminPass) { const am = document.getElementById('admin-modal'); if(am) am.classList.remove('hidden'); } };
 });
 
 async function callBackend(p) {
@@ -276,11 +266,18 @@ async function callBackend(p) {
     if (p.action === 'updateConfig') { db.circles[p.circleId].name = p.name; localStorage.setItem(DB_KEY, JSON.stringify(db)); return { success: true }; }
     if (p.action === 'updateMasterConfig') { db.masterConfig.aiKey = p.aiKey; localStorage.setItem(DB_KEY, JSON.stringify(db)); return { success: true }; }
     if (p.action === 'postTimeline') {
-        const c = db.circles[p.circleId]; if(!c.timeline) c.timeline = [];
+        const c = db.circles[p.circleId];
+        if (!c) return { success: false, error: "サークルデータが見つかりません。再ログインしてください。" };
+        if(!c.timeline) c.timeline = [];
         c.timeline.push({ userName: p.userName, text: p.text, time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}), images: p.images, aiComment: p.aiComment });
         const k={'スタミナ':'ステータス','スピード':'ステータス','根性':'ステータス','逃げ':'脚質','先行':'脚質','因子':'育成','継承':'育成','サポカ':'編成','賢さ':'ステータス'};
         for(let x in k) if(p.text.includes(x)) { if(!db.globalWisdom) db.globalWisdom = []; if(!db.globalWisdom.some(w=>w.text===p.text)) db.globalWisdom.push({category: k[x], text: p.text}); }
-        localStorage.setItem(DB_KEY, JSON.stringify(db)); return { success: true };
+        try {
+            localStorage.setItem(DB_KEY, JSON.stringify(db));
+            return { success: true };
+        } catch(e) {
+            throw new Error("保存容量がいっぱいです。古い投稿を削除するか、画像を減らして試してください。");
+        }
     }
     if (p.action === 'updateFans') {
         const c = db.circles[p.circleId]; let m = c.members[currentUser.id]; if(!m) m = c.members[currentUser.id] = { name: currentUser.name, totalFans: 0, targetFans: 3000000, history: [], icon: currentUser.avatar };
