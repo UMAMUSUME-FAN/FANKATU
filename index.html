@@ -85,15 +85,21 @@
         </div>
 
         <div class="main-dashboard-grid">
-            <!-- Hero Card -->
-            <div class="hero-card glass-panel" id="heroCard">
+            <!-- Hero Card (Drop Zone for Stats) -->
+            <div class="hero-card glass-panel" id="heroCard" style="cursor:pointer; border: 2px dashed rgba(251,161,186,0.2); transition: 0.3s; position:relative; overflow:hidden;">
                 <div style="display:flex; justify-content:space-between; width:100%; align-items:center; margin-bottom:20px;">
                     <div style="display:flex; align-items:center; gap:12px;">
                         <span class="circle-name-display" id="circleNameDisplay">CIRCLE</span>
-                        <a id="circleDiscordLink" href="#" target="_blank" class="discord-btn"><img src="https://assets-global.website-files.com/6257adef93867e50d84d30e2/636e0a6918e57475a843f59f_icon_clyde_blurple_RGB.svg" style="width:16px; filter:brightness(0) invert(1);"> Discord</a>
                     </div>
                 </div>
                 <h1 class="hero-giant-title">My<br>Quota</h1>
+                
+                <!-- Drop Hint Overlay -->
+                <div id="dropHint" style="position:absolute; bottom:20px; right:30px; text-align:right; pointer-events:none; opacity:0.6;">
+                    <span class="material-icons-outlined" style="font-size:32px;">cloud_upload</span>
+                    <p style="font-size:12px; margin:0;">Paste screenshot to update stats<br>(Ctrl+V / Drop image)</p>
+                </div>
+
                 <div class="hero-progress-section">
                     <div class="hero-bar-track"><div class="hero-bar-fill" id="totalFanProgress"></div></div>
                     <span class="hero-percent" id="totalFanPercentText">0%</span>

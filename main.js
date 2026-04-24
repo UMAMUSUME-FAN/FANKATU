@@ -212,9 +212,21 @@ document.addEventListener('DOMContentLoaded', async () => {
             const db = await callBackend({ action: 'getAllCircles' });
             let aiComment = null;
             if (db.masterConfig?.aiKey && currentImages.length > 0) {
-                showToast("AIが画像からデータを抽出中...");
-                const ocrPrompt = "画像を見て、ウマ娘の名前、ファン数、スピード等のステータス、因子、脚質を可能な限り抽出し、読みやすく箇条書きで文字起こししてください。";
+                showToast("AIが画像から攻略データとファン数を抽出中...");
+                const ocrPrompt = "画像を見て攻略情報を抽出してください。もし『総獲得ファン数』が映っていれば、その数値だけを必ず1行目に『【FAN_COUNT】: 123456789』という形式で書いてください。続けてキャラクター名やステータスも箇条書きで分析してください。";
                 aiComment = await callGemini(db.masterConfig.aiKey, ocrPrompt, currentImages);
+                
+                // ファン数の自動同期
+                if (aiComment) {
+                    const fanMatch = aiComment.match(/【FAN_COUNT】:\s*(\d+[0-9,]*)/);
+                    if (fanMatch) {
+                        const extractedFans = parseInt(fanMatch[1].replace(/,/g, '')) || 0;
+                        if (extractedFans > 0) {
+                            await callBackend({ action: 'updateFans', circleId: currentCircle.id, fans: extractedFans });
+                            showToast(`実績を同期更新しました: ${extractedFans.toLocaleString()}人`);
+                        }
+                    }
+                }
             }
             
             const res = await callBackend({ 
@@ -258,18 +270,69 @@ document.addEventListener('DOMContentLoaded', async () => {
                         if(!isModalOpen && postModal) postModal.classList.remove('hidden');
                         if(currentImages.length < 4){ currentImages.push(compressed); updatePreview(); if(timelineInput) timelineInput.focus(); }
                     } else {
-                        const inc = Math.floor(Math.random() * 500000) + 100000;
-                        const my = currentCircle.members[currentUser.id] || { totalFans: 0, targetFans: 3000000 };
-                        await callBackend({ action: 'updateFans', circleId: currentCircle.id, fans: my.totalFans + inc });
-                        if (my.totalFans < 3000000 && (my.totalFans + inc) >= 3000000) launchConfetti();
-                        showToast(`+${(inc/10000).toFixed(1)}万ファン獲得！ (OCR)`);
-                        updateDataAndUI();
+                        // AIを使用したファン数OCR
+                        const db = await callBackend({ action: 'getAllCircles' });
+                        if (db.masterConfig?.aiKey) {
+                            showToast("AIがファン数を読み取り中...");
+                            const fanPrompt = "このウマ娘のスクリーンショットから『ファン数』の数値だけを抽出し、数字のみで回答してください（例: 1234567）。もし見当たらなければ 0 と答えてください。";
+                            const res = await callGemini(db.masterConfig.aiKey, fanPrompt, [compressed]);
+                            const extractedFans = parseInt((res || "0").replace(/[^0-9]/g, '')) || 0;
+                            
+                            if (extractedFans > 0) {
+                                await callBackend({ action: 'updateFans', circleId: currentCircle.id, fans: extractedFans });
+                                showToast(`ファン数を更新しました: ${extractedFans.toLocaleString()}人`);
+                                if (extractedFans >= 3000000) launchConfetti();
+                                updateDataAndUI();
+                            } else {
+                                showToast("ファン数を読み取れませんでした。別の画像を試してください。", "error");
+                            }
+                        } else {
+                            // APIキーがない場合の簡易シミュレーション
+                            const inc = Math.floor(Math.random() * 500000) + 100000;
+                            const my = currentCircle.members[currentUser.id] || { totalFans: 0, targetFans: 3000000 };
+                            await callBackend({ action: 'updateFans', circleId: currentCircle.id, fans: my.totalFans + inc });
+                            showToast(`+${(inc/10000).toFixed(1)}万ファン獲得！ (Demo)`);
+                            updateDataAndUI();
+                        }
                     }
                 };
                 reader.readAsDataURL(blob);
             }
         }
-    });
+        // --- Drag & Drop Support ---
+    const setupDropZone = (el, isPaddock) => {
+        if(!el) return;
+        el.addEventListener('dragover', (e) => { e.preventDefault(); el.classList.add('drag-over'); });
+        el.addEventListener('dragleave', () => el.classList.remove('drag-over'));
+        el.addEventListener('drop', async (e) => {
+            e.preventDefault();
+            el.classList.remove('drag-over');
+            const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+            for(let f of files) {
+                const r = new FileReader();
+                r.onload = async (re) => {
+                    const compressed = await compressImage(re.target.result);
+                    if (isPaddock) {
+                        if(postModal) postModal.classList.remove('hidden');
+                        if(currentImages.length < 4){ currentImages.push(compressed); updatePreview(); if(timelineInput) timelineInput.focus(); }
+                    } else {
+                        const db = await callBackend({ action: 'getAllCircles' });
+                        if (db.masterConfig?.aiKey) {
+                            showToast("AIがファン数を読み取り中...");
+                            const res = await callGemini(db.masterConfig.aiKey, "ファン数のみ抽出して数字で答えて", [compressed]);
+                            const fans = parseInt((res || "0").replace(/[^0-9]/g, '')) || 0;
+                            if(fans > 0) { await callBackend({action:'updateFans', circleId:currentCircle.id, fans: fans}); updateDataAndUI(); showToast(`ファン数更新: ${fans.toLocaleString()}人`); }
+                        }
+                    }
+                };
+                r.readAsDataURL(f);
+            }
+        });
+    };
+    setupDropZone(document.getElementById('heroCard'), false);
+    setupDropZone(document.getElementById('timelineCard'), true);
+
+});
 
     const attachBtn = document.getElementById('attachImgBtn'); if(attachBtn) attachBtn.onclick = () => { const i = document.getElementById('timelineImageInput'); if(i) i.click(); };
     const tInput = document.getElementById('timelineImageInput'); if(tInput) tInput.onchange = (e) => {
@@ -334,12 +397,15 @@ async function callBackend(p) {
     if (!db.circles[cid]) cid = 'circle-1';
     let targetCircle = db.circles[cid];
 
+    // 箱がなければその場で作る（エラー防止）
+    if(!targetCircle.members) targetCircle.members = {};
+    if(!targetCircle.timeline) targetCircle.timeline = [];
+
     if (p.action === 'getCircleData') return { success: true, circle: targetCircle };
     if (p.action === 'updateConfig') { targetCircle.name = p.name; localStorage.setItem(DB_KEY, JSON.stringify(db)); return { success: true }; }
     if (p.action === 'updateMasterConfig') { if(!db.masterConfig) db.masterConfig = { aiKey: '' }; db.masterConfig.aiKey = p.aiKey; localStorage.setItem(DB_KEY, JSON.stringify(db)); return { success: true }; }
     
     if (p.action === 'postTimeline') {
-        if(!targetCircle.timeline) targetCircle.timeline = [];
         targetCircle.timeline.push({ userName: p.userName, text: p.text, time: new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}), images: p.images, aiComment: p.aiComment });
         try {
             localStorage.setItem(DB_KEY, JSON.stringify(db));
@@ -359,7 +425,7 @@ async function callBackend(p) {
         let m = targetCircle.members[currentUser.id]; 
         if(!m) m = targetCircle.members[currentUser.id] = { name: currentUser.name, totalFans: 0, targetFans: 3000000, history: [], icon: currentUser.avatar };
         m.totalFans = p.fans; m.history.push(p.fans);
-        targetCircle.totalFans = Object.values(targetCircle.members).reduce((s,x)=>s+x.totalFans, 0); 
+        targetCircle.totalFans = Object.values(targetCircle.members).reduce((s,x)=>s+(x.totalFans||0), 0); 
         localStorage.setItem(DB_KEY, JSON.stringify(db)); 
         return { success: true };
     }
