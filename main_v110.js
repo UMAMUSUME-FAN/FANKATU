@@ -231,4 +231,22 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('switchCircleBtn').onclick = () => { appWrapper.style.display = 'none'; portalOverlay.classList.remove('hidden'); };
     document.getElementById('adminBtn').onclick = () => document.getElementById('admin-modal').classList.remove('hidden');
     document.getElementById('closeAdmin').onclick = () => document.getElementById('admin-modal').classList.add('hidden');
+
+    // --- 管理者専用：サークル削除機能 ---
+    const deleteBtn = document.getElementById('deleteCircleBtn');
+    if(deleteBtn) {
+        deleteBtn.onclick = async () => {
+            const pass = prompt("このサークルを【完全削除】しますか？\n実行する場合はサークル名を正確に入力してください：", "");
+            if(pass === currentCircle.name) {
+                if(confirm("【最終確認】本当に削除しますか？この操作は取り消せません。")) {
+                    showToast("サークルを抹消中...");
+                    const res = await callBackend({ action: 'deleteCircle', circleId: currentCircle.id });
+                    showToast("サークルを削除しました。");
+                    location.reload(); // 完全にリセット
+                }
+            } else if(pass !== null) {
+                showToast("サークル名が一致しません。削除を中止しました。", "error");
+            }
+        };
+    }
 });
