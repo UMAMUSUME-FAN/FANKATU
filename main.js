@@ -1,4 +1,5 @@
 const GAS_ENDPOINT = ''; 
+const DB_KEY = 'uma_mock_db';
 let currentUser = null;
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -78,9 +79,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Admin Modal Setup ---
     const adminModal = document.getElementById('admin-modal');
+    window.discordWebhookUrl = '';
+
     document.getElementById('adminBtn').onclick = async () => {
         const res = await callBackend({ action: 'get_db' });
         document.getElementById('adminTotalTarget').value = res.db.totalTarget || 100000000;
+        document.getElementById('adminDiscordWebhook').value = res.db.discordWebhook || '';
         const listDiv = document.getElementById('adminMemberList');
         listDiv.innerHTML = '';
         res.db.members.forEach(m => {
@@ -113,12 +117,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const payload = {
             action: 'save_admin',
             totalTarget: parseInt(document.getElementById('adminTotalTarget').value),
+            discordWebhook: document.getElementById('adminDiscordWebhook').value,
             individualTargets: {}
         };
         document.querySelectorAll('.ind-target-display').forEach(disp => {
             payload.individualTargets[disp.dataset.id] = parseInt(disp.dataset.raw || disp.textContent.replace(/,/g, ''));
         });
         await callBackend(payload);
+        window.discordWebhookUrl = payload.discordWebhook;
         adminModal.classList.add('hidden');
         refreshDashboard();
     };
@@ -140,8 +146,36 @@ document.addEventListener('DOMContentLoaded', () => {
         reader.onload = async () => {
             const res = await callBackend({ action: 'upload', memberId: currentUser.memberId, image: reader.result });
             if (res.success) {
-                document.getElementById('uploadInner').innerHTML = `<span class="material-icons-outlined" style="font-size:40px; color:#2ed573;">check_circle</span><p style="color:#2ed573; font-weight:bold;">+${res.detectedFans.toLocaleString()}</p>`;
-                setTimeout(() => { document.getElementById('uploadInner').innerHTML = `<span class="material-icons-outlined" style="font-size:40px;">cloud_upload</span><p style="margin-top:10px; font-weight:bold;">Waiting for Paste...</p>`; }, 2000);
+                // Discord Webhook (もし設定されていれば)
+                if (window.discordWebhookUrl) {
+                    const message = {
+                        embeds: [{
+                            title: "🎉 サークル活動進捗！",
+                            color: 16490938, // ピンク
+                            fields: [
+                                { name: "メンバー名", value: currentUser.name, inline: true },
+                                { name: "今回の獲得ファン数", value: `+${res.detectedFans.toLocaleString()}人`, inline: true }
+                            ]
+                        }]
+                    };
+                    fetch(window.discordWebhookUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(message) }).catch(e=>{});
+                }
+
+                // X(Twitter) のシェア用URL生成
+                const tweetText = encodeURIComponent(`ウマ娘のサークル活動でファン数を【+${res.detectedFans.toLocaleString()}人】獲得しました！🎉 \n#ウマ娘 #サークルファン数`);
+                const shareUrl = `https://twitter.com/intent/tweet?text=${tweetText}`;
+
+                // 画面を送信完了に切り替え、Xボタンを出す
+                document.getElementById('uploadInner').innerHTML = `
+                    <span class="material-icons-outlined" style="font-size:40px; color:#2ed573;">check_circle</span>
+                    <p style="color:#2ed573; font-weight:bold;">+${res.detectedFans.toLocaleString()}</p>
+                    <div style="margin-top:15px;">
+                        <div onclick="window.open('${shareUrl}', '_blank');" style="background:#000; color:#fff; border:none; padding:8px 15px; border-radius:20px; font-weight:bold; cursor:pointer; font-size:12px; display:inline-block;">𝕏 で結果をポストする</div>
+                    </div>
+                `;
+                
+                // 3秒後に元の画面へ戻す
+                setTimeout(() => { document.getElementById('uploadInner').innerHTML = `<span class="material-icons-outlined" style="font-size:40px;">cloud_upload</span><p style="margin-top:10px; font-weight:bold;">Waiting for Paste...</p>`; }, 4000);
                 refreshDashboard();
             }
         };
@@ -152,6 +186,7 @@ document.addEventListener('DOMContentLoaded', () => {
     async function refreshDashboard() {
         const res = await callBackend({ action: 'get_db' });
         const db = res.db;
+        window.discordWebhookUrl = db.discordWebhook || '';
         
         let totalCurrent = 0;
         db.members.forEach(m => totalCurrent += (db.fans[m.memberId] || 0));
@@ -240,6 +275,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 else if (data.action === 'get_db') { res({success:true, db: db}); }
                 else if (data.action === 'save_admin') {
                     db.totalTarget = data.totalTarget;
+                    db.discordWebhook = data.discordWebhook;
                     db.individualTargets = { ...db.individualTargets, ...data.individualTargets };
                     localStorage.setItem(DB_KEY, JSON.stringify(db)); res({success:true});
                 }
