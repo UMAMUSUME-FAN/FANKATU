@@ -144,13 +144,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     async function compressImage(base64, maxWidth = 1000) {
         return new Promise((resolve) => {
             const img = new Image();
+            img.onerror = () => resolve(base64); // エラー時は圧縮せずそのまま返す
             img.onload = () => {
-                const canvas = document.createElement('canvas');
-                let width = img.width; let height = img.height;
-                if (width > maxWidth) { height = (maxWidth / width) * height; width = maxWidth; }
-                canvas.width = width; canvas.height = height;
-                const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0, width, height);
-                resolve(canvas.toDataURL('image/jpeg', 0.6)); // 60% quality
+                try {
+                    const canvas = document.createElement('canvas');
+                    let width = img.width; let height = img.height;
+                    if (width > maxWidth) { height = (maxWidth / width) * height; width = maxWidth; }
+                    canvas.width = width; canvas.height = height;
+                    const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0, width, height);
+                    resolve(canvas.toDataURL('image/jpeg', 0.7)); 
+                } catch(e) { resolve(base64); }
             };
             img.src = base64;
         });
@@ -178,8 +181,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (currentImages.length === 0) { previewArea.style.display = 'none'; return; }
         previewArea.style.display = 'flex';
         currentImages.forEach((img, idx) => {
-            const div = document.createElement('div'); div.style = "position:relative; width:80px; height:80px; border-radius:10px; overflow:hidden;";
-            div.innerHTML = `<img src="${img}" style="width:100%; height:100%; object-fit:cover;"><span style="position:absolute; top:0; right:0; cursor:pointer; background:rgba(0,0,0,0.5); color:white; padding:2px;" onclick="removeImage(${idx})">×</span>`;
+            const div = document.createElement('div'); div.style = "position:relative; width:80px; height:80px; border-radius:10px; overflow:hidden; border:1px solid #eee;";
+            div.innerHTML = `<img src="${img}" style="width:100%; height:100%; object-fit:cover;"><span style="position:absolute; top:2px; right:2px; cursor:pointer; background:rgba(0,0,0,0.5); color:white; width:18px; height:18px; display:flex; align-items:center; justify-content:center; border-radius:50%; font-size:12px;" onclick="removeImage(${idx})">×</span>`;
             previewArea.appendChild(div);
         });
     };
@@ -193,17 +196,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         if(!timelineInput.value && currentImages.length === 0) return;
         try {
             postBtn.disabled = true; postBtn.innerHTML = "送信中...";
-            
-            // ログイン状態とサークル情報を再チェック
-            if (!currentUser || !currentCircle) {
-                throw new Error("ログイン情報の再確認が必要です。一度リロードしてください。");
-            }
+            if (!currentUser || !currentCircle) throw new Error("ログイン情報を再確認してください。");
 
             const db = await callBackend({ action: 'getAllCircles' });
             let aiComment = null;
             if (db.masterConfig?.aiKey && currentImages.length > 0) {
                 showToast("AIが画像から戦略を分析中...");
-                aiComment = await callGemini(db.masterConfig.aiKey, "画像を見て、攻略アドバイスを100文字以内でしてください。", currentImages);
+                aiComment = await callGemini(db.masterConfig.aiKey, "この画像から攻略アドバイスを100文字以内でして。", currentImages);
             }
             
             const res = await callBackend({ 
@@ -220,11 +219,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                 if(postModal) postModal.classList.add('hidden'); 
                 updateDataAndUI();
                 showToast("パドックに投稿しました！");
-            }
+            } else { throw new Error(res.error || "送信失敗"); }
         } catch(e) {
-            console.error(e);
             showToast(`送信失敗: ${e.message}`, "error");
-        } finally { postBtn.disabled = false; postBtn.innerHTML = '<span class="material-icons-outlined" style="margin-right:8px;">send</span> 送信'; }
+        } finally { if(postBtn){ postBtn.disabled = false; postBtn.innerHTML = '<span class="material-icons-outlined" style="margin-right:8px;">send</span> 送信'; } }
     };
 
     if(timelineInput) timelineInput.onkeydown = (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); if(postBtn) postBtn.click(); } };
@@ -236,8 +234,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     window.addEventListener('paste', async (e) => {
         const items = e.clipboardData.items;
         const isModalOpen = postModal && !postModal.classList.contains('hidden');
-        const isPaddockTarget = document.activeElement && document.activeElement.id === 'timelineInput' || 
-                                (lastClickedElement && (lastClickedElement.closest('#timelineCard') || lastClickedElement.closest('#post-modal')));
+        
+        // モーダルが開いている時は「絶対」に掲示板優先、閉じてる時はクリック場所で判断
+        const isPaddockTarget = isModalOpen || 
+                                (document.activeElement && document.activeElement.id === 'timelineInput') || 
+                                (lastClickedElement && lastClickedElement.closest('#timelineCard'));
 
         for (let item of items) {
             if (item.type.indexOf('image') !== -1) {
@@ -245,7 +246,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const reader = new FileReader();
                 reader.onload = async (re) => {
                     const compressed = await compressImage(re.target.result);
-                    if (isModalOpen || isPaddockTarget) {
+                    if (isPaddockTarget) {
                         if(!isModalOpen && postModal) postModal.classList.remove('hidden');
                         if(currentImages.length < 4){ currentImages.push(compressed); updatePreview(); if(timelineInput) timelineInput.focus(); }
                     } else {
@@ -253,7 +254,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                         const my = currentCircle.members[currentUser.id] || { totalFans: 0, targetFans: 3000000 };
                         await callBackend({ action: 'updateFans', circleId: currentCircle.id, fans: my.totalFans + inc });
                         if (my.totalFans < 3000000 && (my.totalFans + inc) >= 3000000) launchConfetti();
-                        showToast(`+${(inc/10000).toFixed(1)}万ファン獲得！ (OCR解析)`);
+                        showToast(`+${(inc/10000).toFixed(1)}万ファン獲得！ (OCR)`);
                         updateDataAndUI();
                     }
                 };
